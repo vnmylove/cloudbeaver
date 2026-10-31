@@ -20,15 +20,21 @@ import io.cloudbeaver.CloudbeaverMockTest;
 import io.cloudbeaver.app.CEAppStarter;
 import io.cloudbeaver.auth.provider.local.LocalAuthProvider;
 import io.cloudbeaver.auth.provider.rp.RPAuthProvider;
+import io.cloudbeaver.server.CBApplication;
+import io.cloudbeaver.service.teleport.auth.TeleportConstants;
 import io.cloudbeaver.test.WebGQLClient;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.auth.SMAuthStatus;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.utils.SecurityUtils;
+import org.jkiss.dbeaver.model.security.SMAuthProviderCustomConfiguration;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
+import java.net.InetSocketAddress;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -43,6 +49,9 @@ public class AuthenticationTest extends CloudbeaverMockTest {
         query activeUser {
           result: activeUser {
             userId
+            teams {
+              teamId
+            }
           }
         }""";
     private static final String GQL_AUTH_LOGOUT = """
@@ -100,4 +109,93 @@ public class AuthenticationTest extends CloudbeaverMockTest {
         Map<String, Object> activeUser = client.sendQuery(GQL_ACTIVE_USER, null);
         Assert.assertEquals(testUserId, JSONUtils.getString(activeUser, "userId"));
     }
+
+    @Before
+    public void ensureServerStarted() throws Exception {
+        CEAppStarter.startServerIfNotStarted();
+    }
+
+    @Test
+    public void testTeleportLoginMapsOnlyKnownRoles() throws Exception {
+        String jwksPath = "/__test_jwks";
+        com.sun.net.httpserver.HttpServer jwksServer = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(0), 0);
+        jwksServer.createContext(jwksPath, exchange -> {
+            byte[] body = TeleportTestTokens.jwksJson().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        jwksServer.start();
+        try {
+            String jwksUrl = "http://127.0.0.1:" + jwksServer.getAddress().getPort() + jwksPath;
+            configureTeleportProvider(jwksUrl);
+            createTeamWithTeleportRole("editors", "editor");
+
+            WebGQLClient client = CEAppStarter.createClient();
+            String token = TeleportTestTokens.token("alice", List.of("editor", "admin"));
+            Map<String, Object> sessionInfo = client.sendQueryWithHeaders(
+                GQL_OPEN_SESSION, null, Map.of(TeleportConstants.DEFAULT_HEADER_NAME, token));
+            Assert.assertTrue(JSONUtils.getBoolean(sessionInfo, "valid"));
+
+            Map<String, Object> activeUser = client.sendQuery(GQL_ACTIVE_USER, null);
+            Assert.assertEquals("alice", JSONUtils.getString(activeUser, "userId"));
+
+            List<String> teamIds = teamIds(activeUser);
+            Assert.assertTrue(teamIds.contains("editors"));
+            Assert.assertFalse(teamIds.contains("admin"));
+        } finally {
+            jwksServer.stop(0);
+        }
+    }
+
+    private void configureTeleportProvider(String jwksUrl) throws Exception {
+        CBApplication<?> application = CEAppStarter.getTestApp();
+        application.getAppConfiguration().setEnabledAuthProviders(new String[] {"local", "reverseProxy", "teleport"});
+        SMAuthProviderCustomConfiguration configuration = new SMAuthProviderCustomConfiguration("teleport");
+        configuration.setProvider(TeleportConstants.AUTH_PROVIDER);
+        configuration.setDisplayName("Teleport");
+        configuration.setParameters(Map.of(
+            TeleportConstants.PARAM_JWKS_URL, jwksUrl,
+            TeleportConstants.PARAM_ISSUER, TeleportTestTokens.ISSUER,
+            TeleportConstants.PARAM_AUDIENCE, TeleportTestTokens.AUDIENCE
+        ));
+        application.getAppConfiguration().addAuthProviderConfiguration(configuration);
+        application.flushConfiguration();
+    }
+
+    private void createTeamWithTeleportRole(String teamId, String teleportRole) throws Exception {
+        WebGQLClient admin = CEAppStarter.createClient();
+        CEAppStarter.authenticateTestUser(admin);
+        admin.sendQuery(
+            GQL_CREATE_TEAM,
+            Map.of("teamId", teamId, "teamName", teamId));
+        admin.sendQuery(
+            GQL_SET_TEAM_META,
+            Map.of("teamId", teamId, "parameters", Map.of(TeleportConstants.TEAM_METADATA_FIELD, teleportRole)));
+    }
+
+    private List<String> teamIds(Map<String, Object> teamsResult) {
+        Object result = teamsResult.get("teams");
+        if (!(result instanceof List<?> teams)) {
+            return List.of();
+        }
+        return teams.stream()
+            .filter(Map.class::isInstance)
+            .map(team -> JSONUtils.getString((Map<String, Object>) team, "teamId"))
+            .toList();
+    }
+
+    private static final String GQL_CREATE_TEAM = """
+        query createTeam($teamId: ID!, $teamName: String) {
+          result: createTeam(teamId: $teamId, teamName: $teamName) {
+            teamId
+          }
+        }""";
+
+    private static final String GQL_SET_TEAM_META = """
+        query setTeamMetaParameterValues($teamId: ID!, $parameters: Object!) {
+          result: setTeamMetaParameterValues(teamId: $teamId, parameters: $parameters)
+        }""";
+
 }

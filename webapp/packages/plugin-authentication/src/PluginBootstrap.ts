@@ -39,7 +39,19 @@ export class PluginBootstrap extends Bootstrap {
         label: 'authentication_logout',
         tooltip: 'authentication_logout',
       },
-      { onSelect: () => this.authenticationService.logout() },
+      {
+        onSelect: () => {
+          // When Teleport Application Access publishes CloudBeaver, logging out from CloudBeaver alone
+          // is useless: the proxy keeps sending a valid JWT and re-signs the user in. Instead, bounce
+          // the browser to /teleport-logout, which clears the CB session and 302s to the Teleport
+          // logout URL so Teleport ends its own session too.
+          if (this.serverConfigResource.enabledAuthProviders.includes('teleport')) {
+            window.location.assign(`${window.location.origin}/teleport-logout`);
+            return;
+          }
+          this.authenticationService.logout();
+        },
+      },
     );
     this.menuService.addCreator({
       menus: [TOP_NAV_BAR_SETTINGS_MENU],

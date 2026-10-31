@@ -29,6 +29,7 @@
 
         <module>io.cloudbeaver.service.security</module>
         <module>io.cloudbeaver.service.ldap.auth</module>
+        <module>io.cloudbeaver.service.teleport.auth</module>
 
         <module>io.cloudbeaver.resources.drivers.base</module>
 
