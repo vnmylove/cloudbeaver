@@ -2,6 +2,11 @@
 <?eclipse version="3.2"?>
 
 <plugin>
+    <extension point="com.dbeaver.secretController">
+        <controller id="cb-embedded" class="io.cloudbeaver.service.security.CBSecretControllerEmbedded"
+                    label="Embedded secret controller" description="Stores secrets in the embedded database"/>
+    </extension>
+
     <extension point="org.jkiss.dbeaver.auth.provider">
         <authProvider id="local" label="Local"
                 caseInsensitive="true"
@@ -20,6 +25,7 @@
                       description="Reverse proxy header based authentication"
                       trusted="true"
                       configurable="true"
+                      sameTabRedirectOnLogout="true"
                       class="io.cloudbeaver.auth.provider.rp.RPAuthProvider"
                       icon="platform:/plugin/org.jkiss.dbeaver.model/icons/tree/key.svg">
             <credentials>
@@ -37,6 +43,7 @@
                     <property id="last-name-header" label="%last-name-header" type="string" description="%last-name-header.description"/>
                     <property id="full-name-header" label="%full-name-header" type="string" description="%full-name-header.description"/>
                     <property id="role-header" label="%role-header" type="string" description="%role-header.description" requiredFeatures="distributed"/>
+                    <property id="auto-user-provisioning" label="%auto-user-provisioning" type="boolean" description="%auto-user-provisioning.description" defaultValue="true"/>
                 </propertyGroup>
             </configuration>
         </authProvider>

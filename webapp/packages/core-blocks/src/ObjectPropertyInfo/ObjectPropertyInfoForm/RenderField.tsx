@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@ import {
   getObjectPropertyValueType,
   type IObjectPropertyInfo,
 } from '@cloudbeaver/core-sdk';
-import { EMPTY_ARRAY, removeMetadataFromDataURL } from '@cloudbeaver/core-utils';
+import { EMPTY_ARRAY, getTextFileReadingProcess, removeMetadataFromDataURL } from '@cloudbeaver/core-utils';
+import { clsx } from '@dbeaver/ui-kit';
 
 import { FieldCheckbox } from '../../FormControls/Checkboxes/FieldCheckbox.js';
+import { Combobox } from '../../FormControls/Combobox.js';
 import { Select } from '../../FormControls/Select.js';
 import { FormFieldDescription } from '../../FormControls/FormFieldDescription.js';
 import { InputField } from '../../FormControls/InputField/InputField.js';
@@ -30,9 +32,12 @@ import { Link } from '../../Link.js';
 import { useTranslate } from '../../localization/useTranslate.js';
 import { evaluate } from '../evaluate.js';
 import { SAVED_VALUE_INDICATOR } from '../../SAVED_VALUE_INDICATOR.js';
+import { UploadArea } from '../../UploadArea.js';
+import { Button } from '../../Button.js';
 
 interface RenderFieldProps {
   property: IObjectPropertyInfo;
+  isRequired: boolean;
   state?: Record<string, any>;
   context?: Record<string, any>;
   defaultState?: Record<string, any>;
@@ -50,6 +55,7 @@ interface RenderFieldProps {
 
 export const RenderField = observer<RenderFieldProps>(function RenderField({
   property,
+  isRequired,
   state,
   defaultState,
   context,
@@ -85,7 +91,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
     }
   }
 
-  const required = property.required && !readonly;
+  const required = isRequired && !readonly;
   const value = getObjectPropertyValue(property);
   const defaultValue = getObjectPropertyDefaultValue(property);
   const hint = property.hint === property.displayName ? undefined : property.hint;
@@ -93,7 +99,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
   if (controlType === 'link') {
     return (
       <FormFieldDescription label={property.displayName} className={className}>
-        <Link href={state?.[property.id!]} target="_blank" rel="noopener noreferrer">
+        <Link href={state?.[property.id!] ?? value} target="_blank" rel="noopener noreferrer">
           {property.description}
         </Link>
       </FormFieldDescription>
@@ -106,7 +112,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
     }
     return (
       <FormFieldDescription title={property.description} label={property.displayName} className={className}>
-        {state?.[property.id!]}
+        {state?.[property.id!] ?? value}
       </FormFieldDescription>
     );
   }
@@ -147,9 +153,44 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
 
   const passwordSaved = showRememberTip && ((isPassword && !!property.value) || saved);
   const passwordSavedMessage = passwordSaved ? translate('core_blocks_object_property_info_password_saved') : undefined;
-  const placeholder = passwordSavedMessage || property.description;
+
+  function getPlaceholder() {
+    if (passwordSaved && isPassword) {
+      return SAVED_VALUE_INDICATOR;
+    }
+    return passwordSavedMessage || property.description;
+  }
+
+  const placeholder = getPlaceholder();
 
   if (controlType === 'selector') {
+    if (property.allowCustomValue && state !== undefined) {
+      return (
+        <Combobox
+          required={required}
+          name={property.id!}
+          value={state[property.id!]}
+          defaultValue={defaultValue}
+          items={property.validValues!}
+          keySelector={getObjectPropertyOptionValue}
+          valueSelector={getObjectPropertyOptionName}
+          titleSelector={getObjectPropertyOptionName}
+          placeholder={placeholder}
+          title={property.description}
+          disabled={disabled}
+          readOnly={readonly}
+          description={property.hint}
+          className={className}
+          allowCustomValue
+          onChange={value => {
+            state[property.id!] = value ?? '';
+          }}
+        >
+          {property.displayName ?? ''}
+        </Combobox>
+      );
+    }
+
     if (state !== undefined) {
       return (
         <Select
@@ -167,6 +208,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
           readOnly={readonly}
           description={property.hint}
           className={className}
+          portal
         >
           {property.displayName ?? ''}
         </Select>
@@ -188,9 +230,50 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
         readOnly={readonly}
         description={hint}
         className={className}
+        portal
       >
         {property.displayName ?? ''}
       </Select>
+    );
+  }
+
+  if (controlType === 'uploadable-textarea' && state && property.id) {
+    async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+      const file = event.target.files?.[0];
+
+      if (!file) {
+        throw new Error('File is not found');
+      }
+
+      const process = getTextFileReadingProcess(file);
+      const result = await process.promise;
+
+      if (state && property.id) {
+        state[property.id] = result;
+      }
+    }
+
+    return (
+      <div className="tw:flex tw:flex-col tw:gap-2">
+        <Textarea
+          required={required}
+          title={state[property.id]}
+          labelTooltip={property.description || property.displayName}
+          placeholder={placeholder}
+          name={property.id}
+          state={state}
+          disabled={disabled}
+          readOnly={readonly}
+          className={clsx('tw:flex-0!', className)}
+        >
+          {property.displayName ?? ''}
+        </Textarea>
+        <UploadArea disabled={disabled || readonly} reset onChange={handleFileUpload}>
+          <Button className="tw:w-max" tag="div" disabled={disabled || readonly} variant="secondary">
+            {translate('ui_file')}
+          </Button>
+        </UploadArea>
+      </div>
     );
   }
 
@@ -252,6 +335,8 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
       <InputField
         required={required}
         type={type}
+        min={property.constraints?.min}
+        max={property.constraints?.max}
         title={isPassword ? property.description || property.displayName : undefined}
         labelTooltip={property.description || property.displayName}
         name={property.id!}
@@ -275,6 +360,8 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
     <InputField
       required={required}
       type={type}
+      min={property.constraints?.min}
+      max={property.constraints?.max}
       title={isPassword ? property.description || property.displayName : undefined}
       labelTooltip={property.description || property.displayName}
       name={property.id!}

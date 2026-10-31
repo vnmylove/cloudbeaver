@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ public interface DBWServiceAuth extends DBWService {
 
     @WebAction(authRequired = false)
     WebAuthStatus authLogin(
+        @NotNull HttpServletRequest httpRequest,
         @NotNull WebSession webSession,
         @NotNull String providerId,
         @Nullable String providerConfigurationId,
@@ -71,10 +72,12 @@ public interface DBWServiceAuth extends DBWService {
         @Nullable String configurationId
     ) throws DBWebException;
 
-    @WebAction(authRequired = false)
+    @Nullable
+    @WebAction(authRequired = false, configurationModeAllowed = true)
     WebUserInfo activeUser(@NotNull WebSession webSession) throws DBWebException;
 
-    @WebAction(authRequired = false)
+    @NotNull
+    @WebAction(authRequired = false, configurationModeAllowed = true)
     WebAuthProviderInfo[] getAuthProviders(@NotNull HttpServletRequest request) throws DBWebException;
 
     @WebAction()

@@ -6,6 +6,7 @@ on:
       - opened
       - synchronize
       - reopened
+      - ready_for_review
   push:
     branches: [devel]
 
@@ -24,11 +25,6 @@ jobs:
       project-deps: ./cloudbeaver/project.deps
       timeout-minutes: 5
 
-  # build-server:
-  #   name: Server
-  #   uses: ./.github/workflows/backend-build.yml
-  #   secrets: inherit
-
   build-frontend:
     name: Frontend
     uses: ./.github/workflows/frontend-build.yml
@@ -38,11 +34,32 @@ jobs:
     name: Server
     uses: dbeaver/dbeaver-common/.github/workflows/java-checkstyle.yml@devel
     secrets: inherit
+    permissions:
+      contents: read
+      pull-requests: read
 
   lint-frontend:
     name: Frontend
     uses: ./.github/workflows/frontend-lint.yml
     secrets: inherit
+
+  required-builds:
+    name: Required Builds
+    if: ${{ always() && github.event.pull_request.draft != true }}
+    needs: [build-server, build-frontend]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify required builds
+        env:
+          SERVER_RESULT: ${{ needs.build-server.result }}
+          FRONTEND_RESULT: ${{ needs.build-frontend.result }}
+        run: |
+          if [[ "$SERVER_RESULT" != "success" || "$FRONTEND_RESULT" != "success" ]]; then
+            echo "Server build: $SERVER_RESULT"
+            echo "Frontend build: $FRONTEND_RESULT"
+            exit 1
+          fi
 
   # call-frontend-tests:
   #   name: Frontend Unit Tests

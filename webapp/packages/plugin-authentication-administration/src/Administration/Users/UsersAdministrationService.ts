@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -13,9 +13,8 @@ import { PlaceholderContainer } from '@cloudbeaver/core-blocks';
 import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { TabsContainer } from '@cloudbeaver/core-ui';
 
-import { CreateTeamService } from './Teams/TeamsTable/CreateTeamService.js';
 import { EUsersAdministrationSub, UsersAdministrationNavigationService } from './UsersAdministrationNavigationService.js';
-import { CreateUserService } from './UsersTable/CreateUserService.js';
+import type { IUserFilters } from './UsersTable/Filters/useUsersTableFilters.js';
 
 const UserCredentialsList = React.lazy(async () => {
   const { UserCredentialsList } = await import('./UsersTable/UserCredentialsList.js');
@@ -32,26 +31,38 @@ const UsersAdministration = React.lazy(async () => {
   return { default: UsersAdministration };
 });
 
+const UsersTableFilterButton = React.lazy(async () => {
+  const { UsersTableFilterButton } = await import('./UsersTable/Filters/UsersTableFilterButton.js');
+  return { default: UsersTableFilterButton };
+});
+
 export interface IUserDetailsInfoProps {
   user: AdminUser;
 }
 
-@injectable(() => [AdministrationItemService, CreateUserService, TeamsResource, CreateTeamService, UsersResource])
+export interface IUsersActionButtonProps {
+  filters: IUserFilters;
+}
+
+@injectable(() => [AdministrationItemService, TeamsResource, UsersResource])
 export class UsersAdministrationService extends Bootstrap {
   readonly tabsContainer: TabsContainer;
   readonly userDetailsInfoPlaceholder: PlaceholderContainer<IUserDetailsInfoProps>;
+  readonly informationPlaceholder: PlaceholderContainer;
+  readonly statisticsPlaceholder = new PlaceholderContainer();
+  readonly actionButtonsPlaceholder: PlaceholderContainer<IUsersActionButtonProps>;
   administrationItem!: IAdministrationItem;
 
   constructor(
     private readonly administrationItemService: AdministrationItemService,
-    private readonly createUserService: CreateUserService,
     private readonly teamsResource: TeamsResource,
-    private readonly createTeamService: CreateTeamService,
     private readonly usersResource: UsersResource,
   ) {
     super();
     this.userDetailsInfoPlaceholder = new PlaceholderContainer();
     this.tabsContainer = new TabsContainer('Access Control');
+    this.informationPlaceholder = new PlaceholderContainer();
+    this.actionButtonsPlaceholder = new PlaceholderContainer();
   }
 
   override register(): void {
@@ -64,12 +75,11 @@ export class UsersAdministrationService extends Bootstrap {
         },
         {
           name: EUsersAdministrationSub.Users,
-          onDeActivate: this.cancelUserCreate.bind(this),
+          onDeActivate: this.handleUsersDeactivate.bind(this),
         },
         {
           name: EUsersAdministrationSub.Teams,
-          onActivate: this.loadTeams.bind(this),
-          onDeActivate: this.cancelTeamCreate.bind(this),
+          onDeActivate: this.handleTeamsDeactivate.bind(this),
         },
       ],
       defaultSub: EUsersAdministrationSub.Users,
@@ -77,31 +87,18 @@ export class UsersAdministrationService extends Bootstrap {
       getDrawerComponent: () => UsersDrawerItem,
     });
     this.userDetailsInfoPlaceholder.add(UserCredentialsList, 0);
+    this.actionButtonsPlaceholder.add(UsersTableFilterButton, 0);
   }
 
-  private cancelUserCreate(param: string | null, configurationWizard: boolean, outside: boolean) {
-    if (param === 'create') {
-      this.createUserService.close();
-    }
-
+  private handleUsersDeactivate(param: string | null, configurationWizard: boolean, outside: boolean) {
     if (outside) {
       this.usersResource.cleanNewFlags();
     }
   }
 
-  private cancelTeamCreate(param: string | null, configurationWizard: boolean, outside: boolean) {
-    if (param === 'create') {
-      this.createTeamService.dispose();
-    }
-
+  private handleTeamsDeactivate(param: string | null, configurationWizard: boolean, outside: boolean) {
     if (outside) {
       this.teamsResource.cleanNewFlags();
-    }
-  }
-
-  private loadTeams(param: string | null) {
-    if (param === 'create') {
-      this.createTeamService.fillData();
     }
   }
 }

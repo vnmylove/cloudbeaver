@@ -1,13 +1,24 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 import { useCallback, useContext, useId, useState } from 'react';
-import { ComboboxInput, ComboboxItem, clsx, Spinner, ComboboxPopover, ComboboxDisclosure, ComboboxProvider, ComboboxCancel } from '@dbeaver/ui-kit';
+import {
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxGroup,
+  clsx,
+  Spinner,
+  ComboboxPopover,
+  ComboboxDisclosure,
+  ComboboxProvider,
+  ComboboxCancel,
+  useComboboxStore,
+} from '@dbeaver/ui-kit';
 
 import { filterLayoutFakeProps, getLayoutProps } from '../Containers/filterLayoutFakeProps.js';
 import type { ILayoutSizeProps } from '../Containers/ILayoutSizeProps.js';
@@ -25,6 +36,8 @@ export type ComboboxBaseProps<TKey, TValue> = Omit<
 > &
   ILayoutSizeProps & {
     items: TValue[];
+    /** Items pinned below the scrollable list and excluded from search filtering. */
+    footerItems?: TValue[];
     defaultValue?: TKey;
     loading?: boolean;
     description?: string;
@@ -33,6 +46,8 @@ export type ComboboxBaseProps<TKey, TValue> = Omit<
     titleSelector?: (item: TValue) => string | undefined;
     iconSelector?: (item: TValue) => string | React.ReactElement | undefined;
     isDisabled?: (item: TValue) => boolean;
+    /** Marks a group boundary in items; separator items are not rendered. */
+    isSeparator?: (item: TValue) => boolean;
     inline?: boolean;
     allowCustomValue?: boolean;
     allowClear?: boolean;
@@ -54,17 +69,18 @@ type ObjectProps<TValue, TKey extends keyof TState, TState> = ComboboxBaseProps<
   value?: never;
 };
 
-export interface ComboboxType {
+export interface IComboboxType {
   <TKey, TValue>(props: ControlledProps<TKey, TValue>): React.JSX.Element;
   <TValue, TKey extends keyof TState, TState>(props: ObjectProps<TValue, TKey, TState>): React.JSX.Element;
 }
 
-export const Combobox: ComboboxType = observer(function Combobox({
+export const Combobox: IComboboxType = observer(function Combobox({
   value: controlledValue,
   defaultValue,
   name,
   state,
   items,
+  footerItems,
   loading,
   children,
   title,
@@ -80,6 +96,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
   iconSelector,
   titleSelector,
   isDisabled,
+  isSeparator,
   size,
   onSelect,
   onChange,
@@ -96,40 +113,48 @@ export const Combobox: ComboboxType = observer(function Combobox({
     selectedKey = state[name];
   }
 
-  const selectedItem = items.find((item, index) => keySelector(item, index) === selectedKey);
+  const allItems = footerItems ? [...items, ...footerItems] : items;
+  const selectedItem = allItems.find((item, index) => keySelector(item, index) === selectedKey);
   const [internalInputValue, setInternalInputValue] = useState<string | null>(null);
 
   const inputValue: string | null = allowCustomValue ? ((selectedKey ?? null) as string | null) : internalInputValue;
   const selectedValue = selectedItem ? valueSelector(selectedItem) : '';
   const displayValue = inputValue ?? selectedValue;
 
+  function mapItem(item: unknown, index: number) {
+    return {
+      itemKey: String(keySelector(item, index)),
+      itemValue: valueSelector(item),
+      itemTitle: titleSelector?.(item),
+      itemIcon: iconSelector?.(item),
+      itemDisabled: isDisabled?.(item),
+      itemSeparator: isSeparator?.(item),
+    };
+  }
+
   const filteredItems = items
-    .map((item, index) => {
-      const itemKey = String(keySelector(item, index));
-      const itemValue = valueSelector(item);
-      const itemTitle = titleSelector?.(item);
-      const itemIcon = iconSelector?.(item);
-      const itemDisabled = isDisabled?.(item);
-
-      const isVisible =
-        allowCustomValue || inputValue === null || !inputValue.trim() || itemValue.toLowerCase().includes(inputValue.trim().toLowerCase());
-
-      return {
-        item,
-        index,
-        itemKey,
-        itemValue,
-        itemTitle,
-        itemIcon,
-        itemDisabled,
-        isVisible,
-      };
-    })
-    .filter(({ isVisible }) => isVisible);
+    .map(mapItem)
+    .filter(
+      ({ itemValue, itemSeparator }) =>
+        itemSeparator ||
+        internalInputValue === null ||
+        !internalInputValue.trim() ||
+        itemValue.toLowerCase().includes(internalInputValue.trim().toLowerCase()),
+    );
+  const itemGroups: { key: string; items: typeof filteredItems }[] = [{ key: 'first', items: [] }];
+  for (const item of filteredItems) {
+    if (item.itemSeparator) {
+      itemGroups.push({ key: `separator:${item.itemKey}`, items: [] });
+    } else {
+      itemGroups[itemGroups.length - 1]!.items.push(item);
+    }
+  }
+  const visibleGroups = itemGroups.filter(group => group.items.length > 0);
 
   const handleSelect = useCallback(
     (selectedValue: string | string[] | null) => {
-      const item = items.find((item, idx) => keySelector(item, idx) === selectedValue);
+      const allItems = footerItems ? [...items, ...footerItems] : items;
+      const item = allItems.find((item, idx) => keySelector(item, idx) === selectedValue);
       if ((!item || selectedValue === selectedKey) && !allowClear) {
         return;
       }
@@ -144,7 +169,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
         context.change(typeof selectedValue === 'string' ? selectedValue : '', name);
       }
     },
-    [items, selectedKey, allowClear, name, state, onSelect, context, keySelector],
+    [items, footerItems, selectedKey, allowClear, name, state, onSelect, context, keySelector],
   );
 
   const icon: string | React.ReactElement | undefined = selectedItem ? iconSelector?.(selectedItem) : undefined;
@@ -153,7 +178,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
   let comboboxDefaultValue: string | undefined = undefined;
 
   if (comboboxDefaultSelectedValue !== undefined) {
-    const defaultItem = items.find((item, index) => keySelector(item, index) === comboboxDefaultSelectedValue);
+    const defaultItem = allItems.find((item, index) => keySelector(item, index) === comboboxDefaultSelectedValue);
 
     if (defaultItem) {
       comboboxDefaultValue = valueSelector(defaultItem);
@@ -162,12 +187,38 @@ export const Combobox: ComboboxType = observer(function Combobox({
 
   function setInputValue(value: string | null) {
     setInternalInputValue(value);
+    if (allowCustomValue && state && name !== undefined) {
+      state[name] = value;
+    }
     onChange?.(value);
   }
 
+  const comboboxStore = useComboboxStore({
+    value: displayValue,
+    setValue: setInputValue,
+    selectedValue: String(selectedKey ?? ''),
+    defaultValue: comboboxDefaultValue,
+    defaultSelectedValue: comboboxDefaultSelectedValue as string,
+    setSelectedValue: handleSelect,
+    setMounted: mounted => {
+      if (!mounted && allowCustomValue) {
+        setInternalInputValue(null);
+      }
+    },
+  });
+
   function handleBlur() {
-    if (!allowCustomValue) {
+    if (allowCustomValue) {
+      comboboxStore.setOpen(false);
+    } else {
       setInputValue(null);
+    }
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (allowCustomValue && event.key === 'Enter') {
+      event.preventDefault();
+      comboboxStore.setOpen(false);
     }
   }
 
@@ -179,7 +230,41 @@ export const Combobox: ComboboxType = observer(function Combobox({
     return false;
   }
 
-  const displayPopover = !allowCustomValue || items.length > 0;
+  function renderItem({ itemKey, itemValue, itemTitle, itemIcon, itemDisabled }: ReturnType<typeof mapItem>) {
+    return (
+      <ComboboxItem
+        key={itemKey}
+        value={itemKey}
+        disabled={itemDisabled}
+        title={itemTitle}
+        setValueOnClick={handleSetValueOnClick}
+        className={clsx({
+          'tw:cursor-pointer': !itemDisabled,
+          'tw:cursor-not-allowed': itemDisabled,
+        })}
+      >
+        {iconSelector && (
+          <div className="tw:w-4 tw:h-4 tw:shrink-0">{itemIcon && typeof itemIcon === 'string' ? <IconOrImage icon={itemIcon} /> : itemIcon}</div>
+        )}
+        <div className="combobox__item-value">{itemValue}</div>
+      </ComboboxItem>
+    );
+  }
+
+  function renderItems() {
+    if (visibleGroups.length === 0) {
+      return <div className="tw:p-2">{translate('combobox_no_results_placeholder')}</div>;
+    }
+
+    if (!isSeparator) {
+      return filteredItems.map(renderItem);
+    }
+
+    return visibleGroups.map(group => <ComboboxGroup key={group.key}>{group.items.map(renderItem)}</ComboboxGroup>);
+  }
+
+  const hasFooterItems = !!footerItems?.length;
+  const displayPopover = !allowCustomValue || allItems.length > 0;
   const hasCancelButton = !!displayValue && allowClear && !disabled && !readOnly;
 
   return (
@@ -194,14 +279,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
           {children}
         </FieldLabel>
       )}
-      <ComboboxProvider
-        value={displayValue}
-        setValue={setInputValue}
-        selectedValue={selectedValue}
-        defaultValue={comboboxDefaultValue}
-        defaultSelectedValue={comboboxDefaultSelectedValue as string}
-        setSelectedValue={handleSelect}
-      >
+      <ComboboxProvider store={comboboxStore}>
         <div className="tw:relative tw:flex tw:flex-1 tw:items-center tw:gap-2">
           <ComboboxInput
             defaultValue={comboboxDefaultValue}
@@ -216,7 +294,9 @@ export const Combobox: ComboboxType = observer(function Combobox({
             title={title}
             id={inputId}
             size={size}
+            autoSelect={!allowCustomValue}
             onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             {...rest}
           />
           {loading ? (
@@ -234,30 +314,14 @@ export const Combobox: ComboboxType = observer(function Combobox({
           )}
           {icon && <div className="tw:absolute tw:left-3 tw:w-4 tw:h-4">{typeof icon === 'string' ? <IconOrImage icon={icon} /> : icon}</div>}
           {displayPopover && (
-            <ComboboxPopover className="theme-text-on-surface theme-background-surface theme-typography--caption">
-              {filteredItems.length > 0 ? (
-                filteredItems.map(({ itemKey, itemValue, itemTitle, itemIcon, itemDisabled }) => (
-                  <ComboboxItem
-                    key={itemKey}
-                    value={itemKey}
-                    disabled={itemDisabled}
-                    title={itemTitle}
-                    setValueOnClick={handleSetValueOnClick}
-                    className={clsx({
-                      'tw:cursor-pointer': !itemDisabled,
-                      'tw:cursor-not-allowed': itemDisabled,
-                    })}
-                  >
-                    {iconSelector && (
-                      <div className="tw:w-4 tw:h-4 tw:shrink-0">
-                        {itemIcon && typeof itemIcon === 'string' ? <IconOrImage icon={itemIcon} /> : itemIcon}
-                      </div>
-                    )}
-                    <div className="tw:truncate">{itemValue}</div>
-                  </ComboboxItem>
-                ))
-              ) : (
-                <div className="tw:p-2">{translate('combobox_no_results_placeholder')}</div>
+            <ComboboxPopover
+              className={clsx('theme-text-on-surface theme-background-surface', hasFooterItems && 'dbv-kit-combobox__popover--grouped')}
+            >
+              {hasFooterItems ? <div className="dbv-kit-combobox__popover-items">{renderItems()}</div> : renderItems()}
+              {hasFooterItems && (
+                <ComboboxGroup className="dbv-kit-combobox__popover-footer">
+                  {footerItems!.map((item, index) => renderItem(mapItem(item, items.length + index)))}
+                </ComboboxGroup>
               )}
             </ComboboxPopover>
           )}

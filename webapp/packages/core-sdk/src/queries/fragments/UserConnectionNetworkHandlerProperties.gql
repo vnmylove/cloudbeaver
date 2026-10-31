@@ -6,9 +6,13 @@ fragment UserConnectionNetworkHandlerProperties on ObjectPropertyInfo {
   dataType
   value
   validValues
+  allowCustomValue
   defaultValue
   order
   length
   features
   required
+  conditions {
+    ...Condition
+  }
 }

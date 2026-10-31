@@ -5,7 +5,7 @@
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { makeObservable, observable } from 'mobx';
+import { autorun, type IReactionDisposer, makeObservable, observable } from 'mobx';
 
 import type { IConnectionExecutionContext, IConnectionExecutionContextInfo } from '@cloudbeaver/core-connections';
 import type { IServiceProvider } from '@cloudbeaver/core-di';
@@ -16,7 +16,11 @@ import type { GraphQLService, SqlRowIdentifier, SqlRowIdentifierState } from '@c
 import { DatabaseDataSource } from '../DatabaseDataModel/DatabaseDataSource.js';
 import { type IDatabaseDataOptions } from '../DatabaseDataModel/IDatabaseDataOptions.js';
 import type { IDatabaseResultSet } from '../DatabaseDataModel/IDatabaseResultSet.js';
-import { DatabaseDataConstraintAction } from '../DatabaseDataModel/Actions/DatabaseDataConstraintAction.js';
+import {
+  applyPersistedDataFilterConstraints,
+  DatabaseDataConstraintAction,
+  persistDataFilterConstraints,
+} from '../DatabaseDataModel/Actions/DatabaseDataConstraintAction.js';
 import { DocumentDataAction } from '../DatabaseDataModel/Actions/Document/DocumentDataAction.js';
 import { DocumentEditAction } from '../DatabaseDataModel/Actions/Document/DocumentEditAction.js';
 import { IDatabaseDataCacheAction } from '../DatabaseDataModel/Actions/IDatabaseDataCacheAction.js';
@@ -32,16 +36,24 @@ import { ResultSetFormatAction } from '../DatabaseDataModel/Actions/ResultSet/Re
 import { ResultSetSelectAction } from '../DatabaseDataModel/Actions/ResultSet/ResultSetSelectAction.js';
 import { ResultSetViewAction } from '../DatabaseDataModel/Actions/ResultSet/ResultSetViewAction.js';
 import { IDatabaseDataSelectAction } from '../DatabaseDataModel/Actions/IDatabaseDataSelectAction.js';
+import { DatabaseDataFeature } from '../DatabaseDataModel/IDatabaseDataSource.js';
+import { IDatabaseReferencesAction } from '../DatabaseDataModel/Actions/IDatabaseReferencesAction.js';
+import { ResultSetReferencesAction } from '../DatabaseDataModel/Actions/ResultSet/ResultSetReferencesAction.js';
 
 export interface IRowIdentifierInfo {
   state: SqlRowIdentifierState | null;
   identifier: SqlRowIdentifier | null;
 }
 
-export abstract class ResultSetDataSource<TOptions = IDatabaseDataOptions> extends DatabaseDataSource<TOptions, IDatabaseResultSet> {
+export abstract class ResultSetDataSource<TOptions extends IDatabaseDataOptions = IDatabaseDataOptions> extends DatabaseDataSource<
+  TOptions,
+  IDatabaseResultSet
+> {
   executionContext: IConnectionExecutionContext | null;
   totalCountRequestTask: ITask<number> | null;
   private keepExecutionContextOnDispose: boolean;
+  private readonly closingResults = new Set<string>();
+  private readonly persistConstraintsDisposer: IReactionDisposer;
 
   constructor(
     override readonly serviceProvider: IServiceProvider,
@@ -52,6 +64,7 @@ export abstract class ResultSetDataSource<TOptions = IDatabaseDataOptions> exten
     this.totalCountRequestTask = null;
     this.executionContext = null;
     this.keepExecutionContextOnDispose = false;
+    this.setFeature(DatabaseDataFeature.ResultSet);
 
     this.actions
       .registerAction(IDatabaseDataResultAction, DocumentDataAction)
@@ -63,12 +76,19 @@ export abstract class ResultSetDataSource<TOptions = IDatabaseDataOptions> exten
       .registerAction(IDatabaseDataSelectAction, ResultSetSelectAction)
       .registerAction(IDatabaseDataFormatAction, ResultSetFormatAction)
       .registerAction(IDatabaseDataCacheAction, ResultSetCacheAction)
-      .registerAction(IDatabaseDataConstraintAction, DatabaseDataConstraintAction);
+      .registerAction(IDatabaseDataConstraintAction, DatabaseDataConstraintAction)
+      .registerAction(IDatabaseReferencesAction, ResultSetReferencesAction);
 
     makeObservable(this, {
       totalCountRequestTask: observable.ref,
       executionContext: observable,
     });
+
+    this.persistConstraintsDisposer = autorun(() => persistDataFilterConstraints(this));
+  }
+
+  protected override onPersistedStateLoaded(): void {
+    applyPersistedDataFilterConstraints(this);
   }
 
   override isReadonly(resultIndex: number): boolean {
@@ -145,6 +165,7 @@ export abstract class ResultSetDataSource<TOptions = IDatabaseDataOptions> exten
   }
 
   override async dispose(): Promise<void> {
+    this.persistConstraintsDisposer();
     await super.dispose();
     if (this.keepExecutionContextOnDispose) {
       await this.closeResults(this.results);
@@ -201,29 +222,45 @@ export abstract class ResultSetDataSource<TOptions = IDatabaseDataOptions> exten
   }
 
   private async closeResults(results: IDatabaseResultSet[]): Promise<void> {
-    if (!this.executionContext?.context) {
+    for (const result of results) {
+      await this.closeResult(result);
+    }
+  }
+
+  private async closeResult(result: IDatabaseResultSet): Promise<void> {
+    const context = this.executionContext?.context;
+    const { id: resultId, projectId, connectionId, contextId } = result;
+
+    // TODO: it's better to track that context is closed with subscription
+    if (!context || resultId === null || contextId !== context.id) {
       return;
     }
 
-    for (const result of results) {
-      // TODO: it's better to track that context is closed with subscription
-      if (result.id === null || result.contextId !== this.executionContext.context.id) {
-        continue;
-      }
-      try {
-        await this.graphQLService.sdk.closeResult({
-          projectId: result.projectId,
-          connectionId: result.connectionId,
-          contextId: result.contextId,
-          resultId: result.id,
-        });
-      } catch (exception: any) {
-        console.log(`Error closing result (${result.id}):`, exception);
-      }
+    const key = JSON.stringify([projectId, connectionId, contextId, resultId]);
+
+    if (this.closingResults.has(key)) {
+      return;
+    }
+
+    this.closingResults.add(key);
+
+    try {
+      await this.graphQLService.sdk.closeResult({
+        projectId,
+        connectionId,
+        contextId,
+        resultId,
+      });
+    } catch (exception: unknown) {
+      console.log(`Error closing result (${resultId}):`, exception);
+    } finally {
+      this.closingResults.delete(key);
     }
   }
 }
 
-export function isResultSetDataSource<T = IDatabaseDataOptions>(dataSource: any): dataSource is ResultSetDataSource<T> {
+export function isResultSetDataSource<T extends IDatabaseDataOptions = IDatabaseDataOptions>(
+  dataSource: unknown,
+): dataSource is ResultSetDataSource<T> {
   return dataSource instanceof ResultSetDataSource;
 }

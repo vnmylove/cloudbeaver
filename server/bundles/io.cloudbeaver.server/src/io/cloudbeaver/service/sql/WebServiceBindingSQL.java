@@ -27,6 +27,7 @@ import io.cloudbeaver.service.DBWServletContext;
 import io.cloudbeaver.service.WebServiceBindingBase;
 import io.cloudbeaver.service.sql.impl.WebServiceSQL;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.NotNullWhen;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.utils.CommonUtils;
@@ -52,6 +53,14 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
         model.getQueryType()
             .dataFetcher("sqlDialectInfo", env ->
                 getService(env).getDialectInfo(getWebConnection(env))
+            )
+            .dataFetcher("sqlResultAssociations", env ->
+                getService(env).getSqlResultAssociations(
+                    getWebSession(env),
+                    getSQLContext(env),
+                    getArgumentVal(env, "resultsId"),
+                    getArgument(env, "isReference")
+                )
             )
             .dataFetcher("sqlListContexts", env ->
                 getService(env).listContexts(getWebSession(env),
@@ -89,8 +98,9 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
                 getService(env).generateEntityQuery(
                     getWebSession(env),
                     getArgumentVal(env, "generatorId"),
-                    getArgumentVal(env, "options"),
-                    getArgumentVal(env, "nodePathList"))
+                    getArgumentVal(env, "nodePathList"),
+                    getGeneratorOptions(env)
+                )
             )
             .dataFetcher("sqlGenerateResultSetQuery", env ->
                 getService(env).sqlGenerateResultSetQuery(
@@ -98,7 +108,8 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
                     getSQLContext(env),
                     getArgumentVal(env, "generatorId"),
                     getArgumentVal(env, "resultsId"),
-                    getResultsRow(env, "selectedRows")
+                    getResultsRow(env, "selectedRows"),
+                    getGeneratorOptions(env)
                 )
             )
             .dataFetcher("sqlParseScript", env ->
@@ -163,7 +174,7 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
                     getSQLContext(env),
                     getArgumentVal(env, "resultsId"),
                     getArgumentVal(env, "lobColumnIndex"),
-                    getResultsRow(env, "row").get(0)))
+                    getResultsRow(env, "row").getFirst()))
             .dataFetcher("sqlReadLobValue", env ->
                 getService(env).readLobValue(
                     getSQLContext(env),
@@ -232,6 +243,13 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
             .dataFetcher("asyncSqlExecuteResults", env ->
                 getService(env).asyncGetQueryResults(
                     getWebSession(env), getArgumentVal(env, "taskId")
+                ))
+            .dataFetcher("asyncSqlGenerateEntityQuery", env ->
+                getService(env).asyncGenerateEntityQuery(
+                    getWebSession(env),
+                    getArgumentVal(env, "generatorId"),
+                    getArgumentVal(env, "nodePathList"),
+                    getGeneratorOptions(env)
                 ))
             .dataFetcher("asyncSqlExplainExecutionPlan", env ->
                 getService(env).asyncSqlExplainExecutionPlan(
@@ -302,10 +320,10 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
 
     @NotNull
     public static WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo) throws DBWebException {
-        return getSQLConfiguration(connectionInfo.getSession()).getSQLProcessor(connectionInfo);
+        return getSQLProcessor(connectionInfo, true);
     }
 
-    @Nullable
+    @NotNullWhen("connect")
     public static WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo, boolean connect) throws DBWebException {
         return getSQLConfiguration(connectionInfo.getSession()).getSQLProcessor(connectionInfo, connect);
     }
@@ -339,7 +357,7 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
     }
 
     @Override
-    public void addServlets(ServletApplication application, DBWServletContext servletContext) throws DBException {
+    public void addServlets(@NotNull ServletApplication application, @NotNull DBWServletContext servletContext) throws DBException {
         servletContext.addServlet(
             "sqlResultValueViewer",
             new WebSQLResultServlet(application, getServiceImpl()),
@@ -357,16 +375,13 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
         return application.isMultiuser();
     }
 
-    private static class WebSQLConfiguration {
+    public static class WebSQLConfiguration {
         private final Map<WebConnectionInfo, WebSQLProcessor> processors = new HashMap<>();
 
         public WebSQLConfiguration() {
         }
 
-        WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo) throws DBWebException {
-            return WebServiceBindingSQL.getSQLProcessor(connectionInfo, true);
-        }
-
+        @NotNullWhen("connect")
         WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo, boolean connect) throws DBWebException {
             if (connectionInfo.getDataSource() == null) {
                 if (!connect) {
@@ -389,6 +404,7 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
             }
         }
 
+        @NotNull
         public WebSQLConfiguration dispose() {
             synchronized (processors) {
                 processors.forEach((connectionInfo, processor) -> processor.dispose());
@@ -400,6 +416,8 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
 
     ///////////////////////////////////////
     // Helpers
+
+    @Nullable
     public static WebSQLDataFilter getDataFilter(DataFetchingEnvironment env) {
         Map<String, Object> filterProps = getArgument(env, "filter");
         return filterProps == null ? null : new WebSQLDataFilter(filterProps);
@@ -412,6 +430,19 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL>
             return Collections.emptyList();
         }
         return mapList.stream().map(WebSQLResultsRow::new).collect(Collectors.toList());
+    }
+
+    @NotNull
+    private static WebSQLGeneratorOptions getGeneratorOptions(@NotNull DataFetchingEnvironment env) {
+        Map<String, Object> optionsMap = getArgument(env, "generatorOptions");
+        if (optionsMap == null) {
+            return new WebSQLGeneratorOptions(true, false, false);
+        }
+        return new WebSQLGeneratorOptions(
+            CommonUtils.toBoolean(optionsMap.get("useFullyQualifiedNames")),
+            CommonUtils.toBoolean(optionsMap.get("compactSql")),
+            CommonUtils.toBoolean(optionsMap.get("showFullDdl"))
+        );
     }
 
 }

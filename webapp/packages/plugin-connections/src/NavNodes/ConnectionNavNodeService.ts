@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@ import {
   NavNodeInfoResource,
   NavNodeManagerService,
   NavTreeResource,
+  NODE_DATASOURCES_SEGMENT,
   NodeManagerUtils,
 } from '@cloudbeaver/core-navigation-tree';
 import { getProjectNodeId } from '@cloudbeaver/core-projects';
@@ -23,7 +24,6 @@ import {
   ConnectionInfoResource,
   ContainerResource,
   ConnectionsManagerService,
-  getFolderNodeParents,
   type Connection,
   ConnectionInfoActiveProjectKey,
   type IConnectionInfoParams,
@@ -33,6 +33,7 @@ import {
   type IConnectionFolderEvent,
 } from '@cloudbeaver/core-connections';
 import { NavigationTreeService } from '@cloudbeaver/plugin-navigation-tree';
+import { getPathParent, getPathParts } from '@cloudbeaver/core-utils';
 
 @injectable(() => [
   ConnectionInfoResource,
@@ -76,11 +77,8 @@ export class ConnectionNavNodeService {
     this.connectionFolderEventHandler.onEvent<IConnectionFolderEvent>(
       ServerEventId.CbDatasourceFolderCreated,
       data => {
-        const parents = data.nodePaths.map(nodeId => {
-          const parents = getFolderNodeParents(nodeId);
+        const parents = data.nodePaths.map(nodeId => this.resolveParent(nodeId));
 
-          return parents[parents.length - 1]!;
-        });
         this.navTreeResource.markOutdated(resourceKeyList(parents));
       },
       undefined,
@@ -89,11 +87,7 @@ export class ConnectionNavNodeService {
     this.connectionFolderEventHandler.onEvent<IConnectionFolderEvent>(
       ServerEventId.CbDatasourceFolderDeleted,
       data => {
-        const parents = data.nodePaths.map(nodeId => {
-          const parents = getFolderNodeParents(nodeId);
-
-          return parents[parents.length - 1]!;
-        });
+        const parents = data.nodePaths.map(nodeId => this.resolveParent(nodeId));
 
         this.navTreeResource.deleteInNode(
           resourceKeyList(parents),
@@ -197,7 +191,7 @@ export class ConnectionNavNodeService {
           return;
         }
 
-        const nodePath = connectionInfo.nodePath ?? NodeManagerUtils.connectionIdToConnectionNodeId(key.connectionId);
+        const nodePath = connectionInfo.nodePath ?? NodeManagerUtils.connectionIdToConnectionNodeId(key.projectId, key.connectionId);
 
         const node = this.navNodeInfoResource.get(nodePath);
         const folder = node?.parentId ?? getProjectNodeId(key.projectId);
@@ -285,7 +279,7 @@ export class ConnectionNavNodeService {
       this.navTreeResource.insertToNode(parentId, insertIndex, connection.nodePath);
     } finally {
       await this.navNodeInfoResource.loadNodeParents(connection.nodePath);
-      await this.navigationTreeService.showNode(connection.nodePath, this.navNodeInfoResource.getParents(connection.nodePath));
+      await this.navigationTreeService.showNode(connection.nodePath);
     }
   }
 
@@ -307,13 +301,24 @@ export class ConnectionNavNodeService {
         ResourceKeyUtils.some(
           key,
           key =>
-            value.parentNode?.id === key ||
-            value.catalogList.some(catalog => catalog.catalog?.id === key || catalog.schemaList.some(schema => schema?.id === key)) ||
-            value.schemaList.some(schema => schema?.id === key),
+            value.parentNode?.uri === key ||
+            value.catalogList.some(catalog => catalog.catalog?.uri === key || catalog.schemaList.some(schema => schema?.uri === key)) ||
+            value.schemaList.some(schema => schema?.uri === key),
         ),
       )
       .map(([key]) => key);
 
     this.containerResource.markOutdated(resourceKeyList(outdateKeys));
+  }
+
+  private resolveParent(nodeId: string): string {
+    const parent = getPathParent(nodeId);
+    const path = getPathParts(NodeManagerUtils.getPlainPath(parent));
+
+    if (path.length === 2 && path[1] === NODE_DATASOURCES_SEGMENT) {
+      return getPathParent(parent);
+    }
+
+    return parent;
   }
 }

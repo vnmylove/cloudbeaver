@@ -16,8 +16,8 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.EcSignatureConverter;
-import io.cloudbeaver.service.teleport.auth.TeleportConstants;
+import io.cloudbeaver.service.auth.teleport.EcSignatureConverter;
+import io.cloudbeaver.service.auth.teleport.TeleportConstants;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;

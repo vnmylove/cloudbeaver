@@ -10,6 +10,7 @@ import type { IExecutor, ISyncExecutor } from '@cloudbeaver/core-executor';
 import { type TLocalizationToken } from '@cloudbeaver/core-localization';
 import type { ResultDataFormat } from '@cloudbeaver/core-sdk';
 
+import type { IDatabasePersistedStateStore } from './IDatabasePersistedStateStore.js';
 import type { IDatabaseDataActions } from './IDatabaseDataActions.js';
 import type { IDatabaseDataResult } from './IDatabaseDataResult.js';
 
@@ -43,6 +44,26 @@ export enum DatabaseDataAccessMode {
   Readonly,
 }
 
+/**
+ * Feature flags for database data sources.
+ * These flags control which UI actions and capabilities are available for a data source.
+ * Multiple features can be combined to enable different functionality sets.
+ */
+export enum DatabaseDataFeature {
+  /** Base database connection capability. All data sources must have this feature. */
+  Database = 'Database',
+  /** Table/view data editor with full edit, add, delete operations. Used for container data (tables, views). */
+  DataEditor = 'DataEditor',
+  /** Generic result set viewing capability with row identification and execution context management. */
+  ResultSet = 'ResultSet',
+  /** Query execution result display with editing capabilities. Used for SQL query results. */
+  QueryResult = 'QueryResult',
+  /** Data grouping and aggregation functionality. Used for GROUP BY operations. */
+  Grouping = 'Grouping',
+  /** Displays incoming and outgoing table references for the selected table. */
+  References = 'References',
+}
+
 export type GetDatabaseDataSourceOptions<TSource extends IDatabaseDataSource<any, any>> =
   TSource extends IDatabaseDataSource<infer TOptions> ? TOptions : never;
 
@@ -62,6 +83,7 @@ export interface IDatabaseDataSource<TOptions = unknown, TResult extends IDataba
   /** Options of the previous request */
   readonly prevOptions: Readonly<TOptions> | null;
   readonly options: TOptions | null;
+  readonly persistedState: IDatabasePersistedStateStore;
   readonly requestInfo: IRequestInfo;
   readonly error: Error | null;
   readonly canCancel: boolean;
@@ -79,6 +101,7 @@ export interface IDatabaseDataSource<TOptions = unknown, TResult extends IDataba
   isDisabled: (resultIndex?: number) => boolean;
 
   hasResult: (resultIndex: number) => boolean;
+  hasFeature: (feature: DatabaseDataFeature | string) => boolean;
 
   tryGetAction<T>(resultIndex: number, action: SingleServiceType<T, any[]>): T | undefined;
   tryGetAction<T>(result: TResult, action: SingleServiceType<T, any[]>): T | undefined;
@@ -97,8 +120,10 @@ export interface IDatabaseDataSource<TOptions = unknown, TResult extends IDataba
   setAccess: (access: DatabaseDataAccessMode) => this;
   setSlice: (offset: number, count: number) => this;
   setOptions: (options: TOptions) => this;
+  loadPersistedState: (state: Record<string, unknown>) => this;
   setDataFormat: (dataFormat: ResultDataFormat) => this;
   setSupportedDataFormats: (dataFormats: ResultDataFormat[]) => this;
+  setFeature: (feature: DatabaseDataFeature) => this;
 
   retry: () => Promise<void>;
   /**

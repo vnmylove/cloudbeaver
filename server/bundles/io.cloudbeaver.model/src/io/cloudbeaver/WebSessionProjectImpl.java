@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package io.cloudbeaver;
 
 import io.cloudbeaver.model.WebConnectionConfig;
 import io.cloudbeaver.model.WebConnectionInfo;
+import io.cloudbeaver.model.WebNetworkHandlerConfigInput;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.utils.WebDataSourceUtils;
 import org.jkiss.code.NotNull;
@@ -29,11 +30,11 @@ import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPObjectSettingsProvider;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistryCache;
+import org.jkiss.dbeaver.model.auth.SMObjectType;
 import org.jkiss.dbeaver.model.navigator.DBNModel;
 import org.jkiss.dbeaver.model.rm.RMProject;
 import org.jkiss.dbeaver.model.rm.RMUtils;
 import org.jkiss.dbeaver.model.security.SMControllerUtils;
-import org.jkiss.dbeaver.model.security.SMObjectType;
 import org.jkiss.dbeaver.model.websocket.event.datasource.WSDataSourceEvent;
 import org.jkiss.dbeaver.model.websocket.event.datasource.WSDataSourceProperty;
 import org.jkiss.dbeaver.registry.DataSourceDescriptor;
@@ -103,7 +104,7 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
         return projectSettings;
     }
 
-    @Nullable
+    @NotNull
     @Override
     public DBNModel getNavigatorModel() {
         return webSession.getNavigatorModel();
@@ -135,8 +136,11 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
         if (registryIsLoaded) {
             return;
         }
-        getDataSourceRegistry().getDataSources().forEach(this::addConnection);
-        Throwable lastError = getDataSourceRegistry().getLastError();
+        DBPDataSourceRegistry dataSourceRegistry = getDataSourceRegistry();
+        // Connection node paths are resolved through the navigator model, so materialize its lazy database branch first.
+        webSession.initializeProjectNavigator(this);
+        dataSourceRegistry.getDataSources().forEach(this::addConnection);
+        Throwable lastError = dataSourceRegistry.getLastError();
         if (lastError != null) {
             webSession.addSessionError(lastError);
             log.error("Error refreshing connections from project '" + getId() + "'", lastError);
@@ -218,6 +222,7 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
      *
      * @return connections from cache.
      */
+    @NotNull
     public List<WebConnectionInfo> getConnections() {
         if (!registryIsLoaded) {
             addDataSourcesToCache();
@@ -236,6 +241,18 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
     public synchronized boolean updateProjectDataSources(@NotNull WSDataSourceEvent event) {
         var sendDataSourceUpdatedEvent = false;
         DBPDataSourceRegistry registry = getDataSourceRegistry();
+        Map<String, DataSourceDescriptor> dataSourceSnapshots = new HashMap<>();
+        if (WSDataSourceEvent.UPDATED.equals(event.getId())) {
+            for (String dsId : event.getDataSourceIds()) {
+                DBPDataSourceContainer dataSource = registry.getDataSource(dsId);
+                if (dataSource instanceof DataSourceDescriptor descriptor) {
+                    DBPDataSourceContainer snapshot = registry.createDataSource(descriptor);
+                    if (snapshot instanceof DataSourceDescriptor snapshotDescriptor) {
+                        dataSourceSnapshots.put(dsId, snapshotDescriptor);
+                    }
+                }
+            }
+        }
         if (WSDataSourceEvent.CREATED.equals(event.getId()) || WSDataSourceEvent.UPDATED.equals(event.getId())) {
             registry.refreshConfig(event.getDataSourceIds());
         }
@@ -250,15 +267,19 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
                     sendDataSourceUpdatedEvent = true;
                 }
                 case WSDataSourceEvent.UPDATED ->  {
+                    DataSourceDescriptor snapshot = dataSourceSnapshots.get(dsId);
+                    if (snapshot != null && !event.getProperty().hasEffectiveChanges(snapshot, ds)) {
+                        continue;
+                    }
                     if (event.getProperty() == WSDataSourceProperty.CONFIGURATION) {
-                        WebDataSourceUtils.disconnectDataSource(webSession, ds);
+                        WebDataSourceUtils.disconnectDataSource(webSession, ds, true);
                     }
                     if (event.getProperty() != WSDataSourceProperty.INTERNAL) {
                         sendDataSourceUpdatedEvent = true;
                     }
                 }
                 case WSDataSourceEvent.DELETED -> {
-                    WebDataSourceUtils.disconnectDataSource(webSession, ds);
+                    WebDataSourceUtils.disconnectDataSource(webSession, ds, false);
                     if (registry instanceof DBPDataSourceRegistryCache dsrc) {
                         dsrc.removeDataSourceFromList(ds);
                     }
@@ -282,7 +303,13 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
         if (CommonUtils.isEmpty(configMap)) {
             throw new DBWebException("Connection configuration parameters are missing");
         }
-        DBPDataSourceContainer newDataSource = getDataSourceContainerFromInput(getConnectionConfigInput(configMap));
+        WebConnectionConfig config = getConnectionConfigInput(configMap);
+        DataSourceDescriptor newDataSource = getDataSourceContainerFromInput(config);
+        boolean hidden = Boolean.TRUE.equals(config.getHidden());
+        newDataSource.setHidden(hidden);
+        if (hidden) {
+            return addConnection(newDataSource);
+        }
         return addDataSourceToProject(newDataSource);
     }
 
@@ -309,19 +336,57 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
     }
 
     @NotNull
+    @SuppressWarnings("unchecked")
     public WebConnectionInfo updateConnection(@Nullable Map<String, Object> configMap) throws DBWebException {
         WebConnectionConfig config = getConnectionConfigInput(configMap);
         WebConnectionInfo connectionInfo = getWebConnectionInfo(config.getConnectionId());
         DataSourceDescriptor dataSource = (DataSourceDescriptor) connectionInfo.getDataSourceContainer();
+        if (Boolean.TRUE.equals(config.getHidden()) && !dataSource.isHidden()) {
+            throw new DBWebException("Visible connection '%s' cannot be hidden".formatted(dataSource.getId()));
+        }
         webSession.addInfoMessage("Update connection - " + WebDataSourceUtils.getConnectionContainerInfo(dataSource));
 
         DBPDataSourceRegistry registry = getDataSourceRegistry();
-        getInputConfigHandler(config).updateDataSource(dataSource);
-        connectionInfo.setCredentialsSavedInSession(null);
+        boolean wasHidden = dataSource.isHidden();
+        boolean publishDraft = false;
+        WebConnectionConfigInputHandler.CredentialsSnapshot credentialsSnapshot = null;
+        Map<String, Object> savedAuthProperties = null;
+        List<WebNetworkHandlerConfigInput> savedNetworkCredentials = null;
+        var inputHandler = getInputConfigHandler(config);
         try {
-            registry.updateDataSource(dataSource);
-            registry.checkForErrors();
+            if (webSession.getApplication().getAppConfiguration()
+                .isFeatureEnabled(DBWConstants.FEATURE_RESET_CREDENTIALS_ON_TARGET_CHANGE) &&
+                inputHandler.isConnectionTargetChanged(dataSource)) {
+                credentialsSnapshot = inputHandler.createCredentialsSnapshot(dataSource);
+                savedAuthProperties = connectionInfo.getSavedAuthProperties();
+                savedNetworkCredentials = connectionInfo.getSavedNetworkCredentials();
+                inputHandler.clearSecretReferences();
+                inputHandler.resetDataSourceCredentials(dataSource);
+                connectionInfo.setSavedCredentials(null, null);
+            }
+            inputHandler.updateDataSource(dataSource);
+            if (config.getHidden() != null) {
+                dataSource.setHidden(config.getHidden());
+            }
+            connectionInfo.setCredentialsSavedInSession(null);
+            publishDraft = wasHidden && !dataSource.isHidden();
+            if (publishDraft) {
+                registry.addDataSource(dataSource);
+            } else if (!wasHidden) {
+                registry.updateDataSource(dataSource);
+            }
+            if (publishDraft || !wasHidden) {
+                registry.checkForErrors();
+            }
         } catch (DBException e) {
+            if (credentialsSnapshot != null) {
+                credentialsSnapshot.restore();
+                connectionInfo.setSavedCredentials(savedAuthProperties, savedNetworkCredentials);
+            }
+            if (publishDraft) {
+                registry.removeDataSource(dataSource);
+            }
+            dataSource.setHidden(wasHidden);
             throw new DBWebException("Failed to update connection", e);
         }
         return connectionInfo;
@@ -344,7 +409,7 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
     @NotNull
     private WebConnectionInfo closeAndDeleteConnection(@NotNull WebConnectionInfo connectionInfo) throws DBWebException {
         DBPDataSourceContainer dataSourceContainer = connectionInfo.getDataSourceContainer();
-        WebDataSourceUtils.disconnectDataSource(webSession, dataSourceContainer);
+        WebDataSourceUtils.disconnectDataSource(webSession, dataSourceContainer, false);
         DBPDataSourceRegistry registry = getDataSourceRegistry();
         registry.removeDataSource(dataSourceContainer);
         removeConnection(dataSourceContainer);
@@ -354,6 +419,36 @@ public class WebSessionProjectImpl extends WebProjectImpl implements DBPAdaptabl
     @NotNull
     public DataSourceDescriptor getDataSourceContainerFromInput(@NotNull WebConnectionConfig configInput) throws DBWebException {
         return getInputConfigHandler(configInput).createDataSourceContainer();
+    }
+
+    @NotNull
+    public DataSourceDescriptor getDataSourceContainerFromInput(
+        @NotNull WebConnectionConfig configInput,
+        @NotNull DataSourceDescriptor sourceDataSource,
+        boolean resetCredentials
+    ) throws DBWebException {
+        var dataSourceCopy = (DataSourceDescriptor) sourceDataSource.createCopy(sourceDataSource.getRegistry());
+        var inputHandler = getInputConfigHandler(configInput);
+        if (resetCredentials) {
+            inputHandler.clearSecretReferences();
+            inputHandler.resetDataSourceCredentials(dataSourceCopy);
+        }
+        inputHandler.updateDataSource(dataSourceCopy);
+        return dataSourceCopy;
+    }
+
+    public void updateDataSourceContainerFromInput(
+        @NotNull WebConnectionConfig configInput,
+        @NotNull DataSourceDescriptor dataSource
+    ) throws DBWebException {
+        getInputConfigHandler(configInput).updateDataSource(dataSource);
+    }
+
+    public boolean isConnectionTargetChanged(
+        @NotNull WebConnectionConfig configInput,
+        @NotNull DataSourceDescriptor dataSource
+    ) {
+        return getInputConfigHandler(configInput).isConnectionTargetChanged(dataSource);
     }
 
     @NotNull

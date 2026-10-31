@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,16 +10,17 @@ import { useCallback, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { reaction } from 'mobx';
 
-import { FieldCheckbox, Link, Placeholder, s, useS, useTranslate } from '@cloudbeaver/core-blocks';
+import { Checkbox, Link, Placeholder, s, useS, useTranslate } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import type { AdminUserInfoFragment } from '@cloudbeaver/core-sdk';
 import { UsersResource } from '@cloudbeaver/core-authentication';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { ADMINISTRATION_TABLE_DEFAULT_ROW_HEIGHT, AdministrationTableStyles } from '@cloudbeaver/core-administration';
-import { DataGrid, useCreateGridReactiveValue } from '@cloudbeaver/plugin-data-grid';
+import { DataGrid, useCellCopy, useCreateGridReactiveValue } from '@cloudbeaver/plugin-data-grid';
 
 import { UsersTableOptionsPanelService } from './UsersTableOptionsPanelService.js';
 import { UsersAdministrationService } from '../UsersAdministrationService.js';
+import { Command } from '@dbeaver/ui-kit';
 
 interface Props {
   users: AdminUserInfoFragment[];
@@ -33,12 +34,14 @@ const ROLE_COLUMN = { key: 'role', label: 'authentication_user_role' };
 const TEAM_COLUMN = { key: 'team', label: 'authentication_user_team' };
 const ENABLED_COLUMN = { key: 'enabled', label: 'authentication_user_enabled' };
 const AUTH_COLUMN = { key: 'auth', label: 'authentication_administration_user_auth_methods' };
+const LAST_LOGIN_COLUMN = { key: 'lastLogin', label: 'plugin_authentication_administration_user_last_login' };
 
-const COLUMNS = [ID_COLUMN, TEAM_COLUMN, ENABLED_COLUMN, AUTH_COLUMN];
+const COLUMNS = [ID_COLUMN, TEAM_COLUMN, ENABLED_COLUMN, AUTH_COLUMN, LAST_LOGIN_COLUMN];
 
 export const UsersTable = observer<Props>(function UsersTable({ users, isManageable, displayAuthRole, onLoadMore }) {
   const translate = useTranslate();
   const styles = useS(AdministrationTableStyles);
+  const cellCopy = useCellCopy();
   const notificationService = useService(NotificationService);
   const usersTableOptionsPanelService = useService(UsersTableOptionsPanelService);
   const usersAdministrationService = useService(UsersAdministrationService);
@@ -84,13 +87,15 @@ export const UsersTable = observer<Props>(function UsersTable({ users, isManagea
 
     if (column.key === ID_COLUMN.key) {
       return (
-        <div
+        <Command
+          render={<div />}
+          tabIndex={0}
           title={row.userId}
-          className="tw:flex tw:cursor-pointer tw:items-center tw:gap-2"
+          className="tw:flex tw:cursor-pointer tw:items-center tw:gap-2 tw:outline-none!"
           onClick={() => usersTableOptionsPanelService.open(row.userId)}
         >
           <Link truncate>{row.userId}</Link>
-        </div>
+        </Command>
       );
     }
 
@@ -106,17 +111,19 @@ export const UsersTable = observer<Props>(function UsersTable({ users, isManagea
 
     if (column.key === ENABLED_COLUMN.key) {
       const isActive = usersResource.isActiveUser(row.userId);
+      const disabled = isActive || !isManageable;
       const title = isActive ? translate('administration_teams_team_granted_users_permission_denied') : undefined;
 
       return (
-        <div className="tw:flex tw:items-center tw:justify-center">
-          <FieldCheckbox
-            title={title}
-            checked={row.enabled}
-            disabled={isActive || !isManageable}
-            onChange={() => enableUser(row.userId, !row.enabled)}
-          />
-        </div>
+        <Checkbox
+          className="tw:flex tw:w-full tw:h-full tw:items-center tw:justify-center"
+          aria-label={translate('authentication_user_enabled')}
+          tabIndex={0}
+          title={title}
+          checked={row.enabled}
+          disabled={disabled}
+          onChange={() => enableUser(row.userId, !row.enabled)}
+        />
       );
     }
 
@@ -126,6 +133,12 @@ export const UsersTable = observer<Props>(function UsersTable({ users, isManagea
           <Placeholder container={usersAdministrationService.userDetailsInfoPlaceholder} user={row} />
         </div>
       );
+    }
+
+    if (column.key === LAST_LOGIN_COLUMN.key) {
+      const lastLoginFullTime = row.lastLoginTime ? new Date(row.lastLoginTime).toLocaleString() : '-';
+      const lastLoginDate = row.lastLoginTime ? new Date(row.lastLoginTime).toLocaleDateString() : '-';
+      return <span title={lastLoginFullTime}>{lastLoginDate}</span>;
     }
 
     return null;
@@ -150,7 +163,7 @@ export const UsersTable = observer<Props>(function UsersTable({ users, isManagea
   ]);
 
   return (
-    <div className="tw:overflow-auto tw:h-full tw:max-w-full theme-text-on-surface">
+    <div className="tw:h-full tw:max-w-full theme-text-on-surface">
       <DataGrid
         columnCount={columnsCount}
         rowCount={rowsCount}
@@ -161,6 +174,7 @@ export const UsersTable = observer<Props>(function UsersTable({ users, isManagea
         cell={cell}
         className={s(styles, { table: true })}
         onScrollToBottom={onLoadMore}
+        onCellKeyDown={cellCopy.handleKeyDown}
       />
     </div>
   );

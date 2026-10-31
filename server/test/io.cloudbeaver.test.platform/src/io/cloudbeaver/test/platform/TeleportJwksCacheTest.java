@@ -16,13 +16,13 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.JwkEntry;
-import io.cloudbeaver.service.teleport.auth.TeleportConstants;
-import io.cloudbeaver.service.teleport.auth.TeleportJwksCache;
-import io.cloudbeaver.service.teleport.auth.TeleportJwtException;
+import io.cloudbeaver.service.auth.teleport.JwkEntry;
+import io.cloudbeaver.service.auth.teleport.TeleportConstants;
+import io.cloudbeaver.service.auth.teleport.TeleportJwksCache;
+import io.cloudbeaver.service.auth.teleport.TeleportJwtException;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 import java.security.KeyPairGenerator;
@@ -47,8 +47,8 @@ public class TeleportJwksCacheTest {
             + "\"e\":\"" + base64(key.getPublicExponent()) + "\"}");
 
         JwkEntry entry = cache(jwks, new AtomicInteger()).getKey("rsa-1");
-        Assert.assertEquals(TeleportConstants.ALG_RS256, entry.alg());
-        Assert.assertEquals(key, entry.publicKey());
+        Assertions.assertEquals(TeleportConstants.ALG_RS256, entry.alg());
+        Assertions.assertEquals(key, entry.publicKey());
     }
 
     @Test
@@ -62,10 +62,10 @@ public class TeleportJwksCacheTest {
             + "\"y\":\"" + base64(key.getW().getAffineY()) + "\"}");
 
         JwkEntry entry = cache(jwks, new AtomicInteger()).getKey("ec-1");
-        Assert.assertEquals(TeleportConstants.ALG_ES256, entry.alg());
+        Assertions.assertEquals(TeleportConstants.ALG_ES256, entry.alg());
         ECPublicKey parsed = (ECPublicKey) entry.publicKey();
-        Assert.assertEquals(key.getW().getAffineX(), parsed.getW().getAffineX());
-        Assert.assertEquals(key.getW().getAffineY(), parsed.getW().getAffineY());
+        Assertions.assertEquals(key.getW().getAffineX(), parsed.getW().getAffineX());
+        Assertions.assertEquals(key.getW().getAffineY(), parsed.getW().getAffineY());
     }
 
     @Test
@@ -74,15 +74,15 @@ public class TeleportJwksCacheTest {
         String duplicate = key.replace("\"kid\":\"real\"", "\"kid\":\"\"");
         TeleportJwksCache jwksCache = cache(jwks(key + "," + duplicate), new AtomicInteger());
 
-        Assert.assertEquals(jwksCache.getKey("real").publicKey(), jwksCache.getKey("").publicKey());
+        Assertions.assertEquals(jwksCache.getKey("real").publicKey(), jwksCache.getKey("").publicKey());
     }
 
     @Test
     public void skipsUnsupportedKeys() throws Exception {
         String unsupported = "{\"kty\":\"OKP\",\"alg\":\"EdDSA\",\"crv\":\"Ed25519\",\"kid\":\"ed\",\"x\":\"abcd\"}";
         TeleportJwksCache jwksCache = cache(jwks(unsupported + "," + ecKey("ec")), new AtomicInteger());
-        Assert.assertEquals(TeleportConstants.ALG_ES256, jwksCache.getKey("ec").alg());
-        Assert.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("ed"));
+        Assertions.assertEquals(TeleportConstants.ALG_ES256, jwksCache.getKey("ec").alg());
+        Assertions.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("ed"));
     }
 
     @Test
@@ -91,7 +91,7 @@ public class TeleportJwksCacheTest {
         TeleportJwksCache jwksCache = cache(jwks(ecKey("ec")), requests);
         jwksCache.getKey("ec");
         jwksCache.getKey("ec");
-        Assert.assertEquals(1, requests.get());
+        Assertions.assertEquals(1, requests.get());
     }
 
     @Test
@@ -102,8 +102,8 @@ public class TeleportJwksCacheTest {
         jwksCache.getKey("first");
 
         body.set(jwks(ecKey("rotated")));
-        Assert.assertEquals(TeleportConstants.ALG_ES256, jwksCache.getKey("rotated").alg());
-        Assert.assertEquals(2, requests.get());
+        Assertions.assertEquals(TeleportConstants.ALG_ES256, jwksCache.getKey("rotated").alg());
+        Assertions.assertEquals(2, requests.get());
     }
 
     @Test
@@ -112,13 +112,13 @@ public class TeleportJwksCacheTest {
             throw new IllegalStateException("timed out");
         };
         TeleportJwksCache jwksCache = new TeleportJwksCache(JWKS_URL, 3600, failing);
-        Assert.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("any"));
+        Assertions.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("any"));
     }
 
     @Test
     public void failsWhenDocumentHasNoUsableKeys() {
         TeleportJwksCache jwksCache = cache("{\"keys\":[]}", new AtomicInteger());
-        Assert.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("any"));
+        Assertions.assertThrows(TeleportJwtException.class, () -> jwksCache.getKey("any"));
     }
 
     private static TeleportJwksCache cache(String body, AtomicInteger requests) {

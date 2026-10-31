@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,12 @@ package io.cloudbeaver.model;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebServiceUtils;
 import io.cloudbeaver.model.session.WebSession;
+import io.cloudbeaver.server.CBConstants;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBConstants;
+import org.jkiss.dbeaver.model.DatabaseURL;
 import org.jkiss.dbeaver.model.connection.*;
 import org.jkiss.dbeaver.model.impl.auth.AuthModelDatabaseNative;
 import org.jkiss.dbeaver.model.meta.Property;
@@ -176,29 +179,28 @@ public class WebDatabaseDriverInfo {
         return driver.getDefaultConnectionProperties();
     }
 
+    @NotNull
     @Property
     public WebPropertyInfo[] getDriverProperties() throws DBWebException {
         try {
             DBPConnectionConfiguration cfg = new DBPConnectionConfiguration();
             cfg.setUrl(CommonUtils.notEmpty(driver.getSampleURL()));
-            cfg.setHostName(DBConstants.HOST_LOCALHOST);
-            cfg.setHostPort(driver.getDefaultPort());
-            cfg.setDatabaseName(driver.getDefaultDatabase());
-            cfg.setUrl(driver.getConnectionURL(cfg));
-            DBPPropertyDescriptor[] properties = driver.getDataSourceProvider().getConnectionProperties(webSession.getProgressMonitor(), driver, cfg);
-            if (properties == null) {
-                return new WebPropertyInfo[0];
+            DatabaseURL.Pattern dbUrlPattern = DatabaseURL.getUrlPattern(CommonUtils.notEmpty(driver.getSampleURL()));
+            for (String propName : dbUrlPattern.getMandatoryPropertyNames()) {
+                switch (propName) {
+                    case DBConstants.PROP_HOST -> cfg.setHostName(CBConstants.HOST_LOCALHOST);
+                    case DBConstants.PROP_PORT -> cfg.setHostPort(CommonUtils.notNull(driver.getDefaultPort(), "0"));
+                    case DBConstants.PROP_SERVER -> cfg.setServerName(CommonUtils.notNull(driver.getDefaultServer(), propName));
+                    case DBConstants.PROP_USER -> cfg.setUserName(CommonUtils.notNull(driver.getDefaultUser(), propName));
+                    case DBConstants.PROP_DATABASE, DBConstants.PROP_FOLDER, DBConstants.PROP_FILE ->
+                        cfg.setDatabaseName(CommonUtils.notNull(driver.getDefaultDatabase(), propName));
+                    default -> log.debug("Unexpected mandatory URL property " + propName);
+                }
             }
-
-            PropertySourceCustom propertySource = new PropertySourceCustom(
-                properties,
-                cfg.getProperties());
-
-            return Arrays.stream(properties)
-                .map(p -> new WebPropertyInfo(webSession, p, propertySource)).toArray(WebPropertyInfo[]::new);
+            cfg.setUrl(driver.getConnectionURL(cfg));
+            return WebServiceUtils.getDriverProperties(webSession, driver, null, cfg);
         } catch (DBException e) {
-            log.error("Error reading driver properties:\n" + e.getMessage());
-            return new WebPropertyInfo[0];
+            throw new DBWebException("Error obtaining driver properties", e);
         }
     }
 

@@ -1,21 +1,23 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
 
 import { UserInfoResource } from '@cloudbeaver/core-authentication';
-import { Loader, s, SContext, type StyleRegistry, useExecutor, useS } from '@cloudbeaver/core-blocks';
+import { Loader, SContext, type StyleRegistry, useExecutor } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
-import { type ITabData, TabPanel, TabsBox, TabStyles } from '@cloudbeaver/core-ui';
+import { type ITabData, TabList, TabPanel, TabsState, TabStyles } from '@cloudbeaver/core-ui';
 import { CaptureView } from '@cloudbeaver/core-view';
+import { useConnectionTypeLoader } from '@cloudbeaver/core-connections';
+import { clsx } from '@dbeaver/ui-kit';
 
 import { NavigationTabsService } from '../NavigationTabsService.js';
-import styles from './shared/NavigationTabsBar.module.css';
 import NavigationTabsBarTab from './shared/NavigationTabsBarTab.module.css';
 import { TabHandlerPanel } from './Tabs/TabHandlerPanel.js';
 import { TabHandlerTab } from './Tabs/TabHandlerTab.js';
@@ -38,24 +40,25 @@ const tabsRegistry: StyleRegistry = [
 
 export const NavigationTabsBar = observer<Props>(function NavigationTabsBar({ className }) {
   const userInfoResource = useService(UserInfoResource);
-  const navigation = useService(NavigationTabsService);
-  const navigationSettings = useService(NavigationTabsSettingsService);
+  const navigationTabsService = useService(NavigationTabsService);
+  const navigationTabsSettingsService = useService(NavigationTabsSettingsService);
   // TODO: we get exception when after closing the restored page trying to open another
   //       it's related to hooks order and state restoration
   const [restoring, setRestoring] = useState(false);
-  const style = useS(styles);
 
-  const handleSelect = useCallback((tabId: string) => navigation.selectTab(tabId), [navigation]);
-  const handleClose = useCallback((tabId: string) => navigation.closeTab(tabId), [navigation]);
+  const handleSelect = useCallback((tabId: string) => navigationTabsService.selectTab(tabId), [navigationTabsService]);
+  const handleClose = useCallback((tabId: string) => navigationTabsService.closeTab(tabId), [navigationTabsService]);
+
+  useConnectionTypeLoader();
 
   function unloadTabs() {
-    navigation.unloadTabs();
+    navigationTabsService.unloadTabs();
   }
 
   async function restoreTabs() {
     setRestoring(true);
     try {
-      await navigation.restoreTabs();
+      await navigationTabsService.restoreTabs();
     } finally {
       setRestoring(false);
     }
@@ -67,12 +70,12 @@ export const NavigationTabsBar = observer<Props>(function NavigationTabsBar({ cl
 
   const handleReorder = useCallback(
     (draggedTabId: string, targetTabId: string, position: 'before' | 'after') => {
-      navigation.reorderTab(draggedTabId, {
+      navigationTabsService.reorderTab(draggedTabId, {
         tabId: targetTabId,
         position,
       });
     },
-    [navigation],
+    [navigationTabsService],
   );
 
   useExecutor({
@@ -81,7 +84,7 @@ export const NavigationTabsBar = observer<Props>(function NavigationTabsBar({ cl
   });
 
   useExecutor({
-    executor: navigation.onStateUpdate,
+    executor: navigationTabsService.onStateUpdate,
     postHandlers: [unloadTabs, restoreTabs],
   });
 
@@ -90,38 +93,43 @@ export const NavigationTabsBar = observer<Props>(function NavigationTabsBar({ cl
     restoreTabs();
   }, []);
 
-  if (navigation.tabIdList.length === 0) {
+  if (navigationTabsService.tabIdList.length === 0) {
     return <NavigationWelcomeScreen />;
   }
 
   return (
-    <CaptureView view={navigation} className={s(style, { captureView: true }, className)}>
+    <CaptureView view={navigationTabsService} className={clsx('tw:flex-1 tw:flex tw:overflow-auto', className)}>
       <Loader loading={restoring}>
-        <TabsBox
-          currentTabId={navigation.currentTabId}
-          className={s(style, { tabsBox: true })}
-          tabsClassName={s(style, { tabs: true })}
-          tabs={
-            <SContext registry={tabsRegistry}>
-              {navigation.tabIdList.map(tabId => (
-                <TabHandlerTab key={tabId} tabId={tabId} onSelect={handleSelect} onClose={handleClose} />
-              ))}
-            </SContext>
-          }
-          tabList={navigation.tabIdList}
-          multipleRows={navigationSettings.hasMultipleRows}
+        <TabsState
+          currentTabId={navigationTabsService.currentTabId}
           reorderStateKey="navigation-tabs-bar"
-          autoSelect
+          tabList={navigationTabsService.tabIdList}
           enabledBaseActions
+          enabledContextMenu
+          autoSelect
           onChange={handleTabChange}
           onReorder={handleReorder}
         >
-          {navigation.tabIdList.map(tabId => (
-            <TabPanel key={tabId} tabId={tabId} lazy>
-              {() => <TabHandlerPanel tabId={tabId} />}
-            </TabPanel>
-          ))}
-        </TabsBox>
+          <div className="tw:outline-none! tw:flex-1 tw:flex tw:flex-col tw:max-w-full">
+            <TabList
+              className={clsx(
+                'tw:overflow-auto tw:max-w-full theme-background-secondary theme-text-on-secondary',
+                navigationTabsSettingsService.hasMultipleRows && 'tw:flex-wrap',
+              )}
+            >
+              <SContext registry={tabsRegistry}>
+                {navigationTabsService.tabIdList.map(tabId => (
+                  <TabHandlerTab key={tabId} tabId={tabId} onSelect={handleSelect} onClose={handleClose} />
+                ))}
+              </SContext>
+            </TabList>
+            {navigationTabsService.tabIdList.map(tabId => (
+              <TabPanel key={tabId} className="tw:flex-1 tw:flex tw:overflow-hidden tw:relative" tabId={tabId} lazy>
+                {() => <TabHandlerPanel tabId={tabId} />}
+              </TabPanel>
+            ))}
+          </div>
+        </TabsState>
       </Loader>
     </CaptureView>
   );

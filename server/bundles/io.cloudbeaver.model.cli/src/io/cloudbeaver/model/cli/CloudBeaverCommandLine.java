@@ -18,27 +18,27 @@ package io.cloudbeaver.model.cli;
 
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
-import org.jkiss.dbeaver.model.cli.*;
-import org.jkiss.dbeaver.model.cli.model.CommandLineAuthenticator;
+import org.jkiss.dbeaver.model.cli.ApplicationCommandLine;
+import org.jkiss.dbeaver.model.cli.ApplicationInstanceController;
+import org.jkiss.dbeaver.model.cli.CLIContextImpl;
+import org.jkiss.dbeaver.model.cli.CLIRunMeta;
+import org.jkiss.dbeaver.model.cli.registry.CLICommandDescriptor;
 import picocli.CommandLine;
 
+import java.util.List;
+
 public class CloudBeaverCommandLine extends ApplicationCommandLine<ApplicationInstanceController> {
-    @Nullable
-    private final CommandLineAuthenticator authenticator;
     private final CloudBeaverMixin mixin;
 
-    public CloudBeaverCommandLine(@Nullable CommandLineAuthenticator authenticator) {
+    public CloudBeaverCommandLine() {
         super();
-        this.authenticator = authenticator;
         this.mixin = new CloudBeaverMixin();
     }
 
     public CloudBeaverCommandLine(
-        @Nullable CommandLineAuthenticator authenticator,
         @NotNull CloudBeaverMixin mixin
     ) {
         super();
-        this.authenticator = authenticator;
         this.mixin = mixin;
     }
 
@@ -48,9 +48,6 @@ public class CloudBeaverCommandLine extends ApplicationCommandLine<ApplicationIn
         @NotNull CLIContextImpl context,
         @NotNull CLIRunMeta runMeta
     ) {
-        if (authenticator != null) {
-            context.setContextParameter(CLIConstants.CONTEXT_PARAM_AUTHENTICATOR, authenticator);
-        }
         return new CloudBeaverTopLevelCommand(applicationInstanceController, context, runMeta);
     }
 
@@ -59,9 +56,10 @@ public class CloudBeaverCommandLine extends ApplicationCommandLine<ApplicationIn
     protected CommandLine initCommandLine(
         @Nullable ApplicationInstanceController applicationInstanceController,
         @NotNull CLIContextImpl context,
-        @NotNull CLIRunMeta runMeta
+        @NotNull CLIRunMeta runMeta,
+        @NotNull List<CLICommandDescriptor> commandsToExecute
     ) {
-        var cmd = super.initCommandLine(applicationInstanceController, context, runMeta);
+        var cmd = super.initCommandLine(applicationInstanceController, context, runMeta, commandsToExecute);
         cmd.addMixin("cloudbeaver", mixin);
         return cmd;
     }

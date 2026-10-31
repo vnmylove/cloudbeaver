@@ -1,6 +1,5 @@
 export default [
   ['core_connections_connections_settings_group', 'Verbindungen'],
-  ['core_connections_new_connection', 'Neue Verbindung'],
   ['core_connections_connection_access_empty', 'Keine verfügbaren Benutzer und Teams'],
   ['core_connections_connection_no_information', 'Keine Information verfügbar'],
   ['connections_administration_delete_confirmation', 'Sie werden diese Verbindungen löschen: '],
@@ -39,10 +38,6 @@ export default [
   ['connections_connection_test_fail', 'Verbindungstest ist fehlgeschlagen'],
   ['connections_network_handler_default_user', 'Benutzer'],
   ['connections_network_handler_default_password', 'Passwort'],
-  ['connections_network_handler_ssh_tunnel_user', 'Benutzer'],
-  ['connections_network_handler_ssh_tunnel_password', 'Passwort'],
-  ['connections_network_handler_ssh_tunnel_auth_type', 'Authentifizierungsmethode'],
-  ['connections_network_handler_ssh_tunnel_advanced_settings', 'Erweiterte Einstellungen'],
   ['connections_not_found', 'Es wurden keine Datenbankverbindungen gefunden'],
 
   ['core_connections_settings_disable', 'Disable'],
@@ -51,4 +46,5 @@ export default [
   ['core_connections_connection_temporary', 'Temporary connection'],
   ['core_connections_connection_create_success', 'Connection was created'],
   ['core_connections_connection_update_success', 'Connection was updated'],
+  ['core_connections_no_connection', 'Keine Verbindung'],
 ];

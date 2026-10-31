@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import jakarta.websocket.HandshakeResponse;
 import jakarta.websocket.server.HandshakeRequest;
 import jakarta.websocket.server.ServerEndpointConfig;
 import org.eclipse.jetty.ee11.websocket.jakarta.server.internal.JakartaWebSocketCreator;
-import org.eclipse.jetty.http.BadMessageException;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
@@ -89,7 +88,8 @@ public class CBWebSocketServerConfigurator extends ServerEndpointConfig.Configur
             throw new RuntimeException(e.getMessage(), e);
         }
         if (sec.getUserProperties().get(PROP_WEB_SESSION) == null) {
-            throw new BadMessageException("No web session found for websocket request");
+            // no throwing exception here. will be handled in onOpen
+            log.debug("No web session found for websocket request, connection will be closed on open");
         }
     }
 
@@ -97,8 +97,8 @@ public class CBWebSocketServerConfigurator extends ServerEndpointConfig.Configur
     private String getSessionId(@NotNull HandshakeRequest request) {
         // complex auth uses bearer authentication
         List<String> authHeaders = WSClientUtils.getHeaders(request.getHeaders(), HttpConstants.HEADER_AUTHORIZATION);
-        if (!CommonUtils.isEmpty(authHeaders) && authHeaders.get(0).startsWith("Bearer ")) {
-            return authHeaders.get(0).substring(7);
+        if (!CommonUtils.isEmpty(authHeaders) && authHeaders.getFirst().startsWith(HttpConstants.BEARER_PREFIX)) {
+            return authHeaders.getFirst().substring(7);
         }
         return request.getHttpSession() instanceof HttpSession httpSession ? httpSession.getId() : null;
     }

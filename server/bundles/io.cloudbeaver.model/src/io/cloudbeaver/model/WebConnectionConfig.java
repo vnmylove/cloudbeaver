@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.model.meta.Property;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,6 +34,7 @@ public class WebConnectionConfig {
 
     private String connectionId;
     private String driverId;
+    private Boolean hidden;
 
     private boolean readOnly;
 
@@ -64,6 +66,9 @@ public class WebConnectionConfig {
     private Boolean defaultAutoCommit;
     private String defaultCatalogName;
     private String defaultSchemaName;
+    private String connectionType;
+    @NotNull
+    private Map<String, String> defaultUserPreferences = new LinkedHashMap<>();
 
     public WebConnectionConfig() {
     }
@@ -71,6 +76,8 @@ public class WebConnectionConfig {
     public WebConnectionConfig(@NotNull Map<String, Object> params) {
         connectionId = JSONUtils.getString(params, "connectionId");
         driverId = JSONUtils.getString(params, "driverId");
+        hidden = params.containsKey("hidden") && params.get("hidden") != null ?
+            JSONUtils.getBoolean(params, "hidden") : null;
 
         host = JSONUtils.getString(params, "host");
         port = JSONUtils.getString(params, "port");
@@ -99,8 +106,14 @@ public class WebConnectionConfig {
             expertSettingsValues != null ? expertSettingsValues : params, WebExpertSettingsProperties.PROP_KEEP_ALIVE_INTERVAL, -1);
         readOnly = JSONUtils.getBoolean(
             expertSettingsValues != null ? expertSettingsValues : params, WebExpertSettingsProperties.PROP_READ_ONLY);
-        defaultAutoCommit = JSONUtils.getBoolean(
-            expertSettingsValues != null ? expertSettingsValues : params, WebExpertSettingsProperties.PROP_AUTO_COMMIT, true);
+
+        if (expertSettingsValues != null) {
+            defaultAutoCommit = AutoCommitMode.from(
+                JSONUtils.getString(expertSettingsValues, WebExpertSettingsProperties.PROP_AUTO_COMMIT_MODE));
+        } else {
+            defaultAutoCommit = JSONUtils.getBoolean(params, WebExpertSettingsProperties.PROP_AUTO_COMMIT, true);
+        }
+
         defaultCatalogName = JSONUtils.getString(
             expertSettingsValues != null ? expertSettingsValues : params, WebExpertSettingsProperties.PROP_DEFAULT_CATALOG);
         defaultSchemaName = JSONUtils.getString(
@@ -111,10 +124,13 @@ public class WebConnectionConfig {
         String configType = JSONUtils.getString(params, "configurationType");
         configurationType = configType == null ? null : DBPDriverConfigurationType.valueOf(configType);
 
+        Map<String, Object> stringObjectUserPrefMap = JSONUtils.getObject(params, "defaultUserPreferences");
+        stringObjectUserPrefMap.forEach((key, value) -> defaultUserPreferences.put(key, value.toString()));
         networkHandlersConfig = new ArrayList<>();
         for (Map<String, Object> nhc : JSONUtils.getObjectList(params, "networkHandlersConfig")) {
             networkHandlersConfig.add(new WebNetworkHandlerConfigInput(nhc));
         }
+        connectionType = JSONUtils.getString(params, "connectionType");
     }
 
     @Property
@@ -124,6 +140,15 @@ public class WebConnectionConfig {
 
     public void setConnectionId(String connectionId) {
         this.connectionId = connectionId;
+    }
+
+    @Nullable
+    public Boolean getHidden() {
+        return hidden;
+    }
+
+    public void setHidden(@Nullable Boolean hidden) {
+        this.hidden = hidden;
     }
 
     @Property
@@ -366,5 +391,23 @@ public class WebConnectionConfig {
 
     public void setDefaultSchemaName(String defaultSchemaName) {
         this.defaultSchemaName = defaultSchemaName;
+    }
+
+    @NotNull
+    public Map<String, String> getDefaultUserPreferences() {
+        return defaultUserPreferences;
+    }
+
+    public void setDefaultUserPreferences(@NotNull Map<String, String> defaultUserPreferences) {
+        this.defaultUserPreferences = defaultUserPreferences;
+    }
+
+    @Nullable
+    public String getConnectionType() {
+        return connectionType;
+    }
+
+    public void setConnectionType(@Nullable String connectionType) {
+        this.connectionType = connectionType;
     }
 }

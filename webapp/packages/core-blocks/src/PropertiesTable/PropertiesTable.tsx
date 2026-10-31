@@ -1,13 +1,13 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { computed } from 'mobx';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 
 import { getObjectPropertyOptionValue } from '@cloudbeaver/core-sdk';
 import { isNotNullDefined } from '@dbeaver/js-helpers';
@@ -36,25 +36,28 @@ interface Props {
   className?: string;
   staticProperties?: boolean;
   filterable?: boolean;
+  sortByName?: boolean;
+  disableOverflowEffect?: boolean;
 }
 
 export const PropertiesTable = observer<Props>(function PropertiesTable(props) {
-  const { className, onAdd, readOnly, propertiesState } = props;
+  const { className, onAdd, readOnly, propertiesState, disableOverflowEffect = false } = props;
   const translate = useTranslate();
   const propsRef = useObjectRef({ ...props });
   const style = useS(styles);
 
   const [filterValue, setFilterValue] = useState('');
+  const deferredFilterValue = useDeferredValue(filterValue);
 
   const sortedProperties = useMemo(
     () =>
       computed(() =>
-        propsRef.properties
-          .slice()
-          .sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? ''))
-          .filter(p => p.new || p.key.toLocaleLowerCase().includes(filterValue.toLocaleLowerCase())),
+        ((propsRef.sortByName ?? true)
+          ? propsRef.properties.slice().sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? ''))
+          : propsRef.properties
+        ).filter(p => p.new || p.key.toLocaleLowerCase().includes(deferredFilterValue.toLocaleLowerCase())),
       ),
-    [propsRef.properties, filterValue],
+    [propsRef.properties, propsRef.sortByName, deferredFilterValue],
   );
 
   const changeName = useCallback((id: string, key: string) => {
@@ -164,7 +167,7 @@ export const PropertiesTable = observer<Props>(function PropertiesTable(props) {
             onRemove={removeProperty}
           />
         ))}
-        <div className={s(style, { propertiesListOverflow: true })} />
+        {!disableOverflowEffect && <div className={s(style, { propertiesListOverflow: true })} />}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ import {
   Translate,
   TreeNodeNested,
   TreeNodeNestedMessage,
-  useListKeyboardNavigation,
   useMergeRefs,
   useS,
 } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { EventContext, EventStopPropagationFlag } from '@cloudbeaver/core-events';
 import { EObjectFeature, type NavNode, NavNodeInfoResource, NavTreeResource, ROOT_NODE_PATH } from '@cloudbeaver/core-navigation-tree';
+import { DNDScrollContainer } from '@cloudbeaver/core-ui';
 
 import { useNavTreeDropBox } from '../useNavTreeDropBox.js';
 import style from './ElementsTree.module.css';
@@ -43,6 +43,7 @@ import { elementsTreeLimitRenderer } from './NavTreeLimitFilter/elementsTreeLimi
 import { useDropOutside } from './useDropOutside.js';
 import { type IElementsTree, type IElementsTreeOptions, useElementsTree } from './useElementsTree.js';
 import { useElementsTreeFolderExplorer } from './useElementsTreeFolderExplorer.js';
+import { useElementsTreeKeyboardNavigation } from './useElementsTreeKeyboardNavigation.js';
 
 export interface ElementsTreeProps extends IElementsTreeOptions, React.PropsWithChildren {
   /** Specifies the root path for the tree. ROOT_NODE_PATH will be used if not defined */
@@ -95,9 +96,6 @@ export const ElementsTree = observer(
     const navNodeInfoResource = useService(NavNodeInfoResource);
     const [treeRootRef, setTreeRootRef] = useState<HTMLDivElement | null>(null);
     const folderExplorer = useElementsTreeFolderExplorer(baseRoot, settings);
-    const listRef = useListKeyboardNavigation('[data-tree-node-control][tabindex]:not(:disabled)');
-    const treeMergedRef = useMergeRefs<HTMLDivElement>(setTreeRootRef, listRef);
-
     const root = folderExplorer.state.folder;
 
     const limitFilter = useMemo(() => elementsTreeLimitFilter(navTreeResource), [navTreeResource]);
@@ -133,6 +131,8 @@ export const ElementsTree = observer(
       onOpen,
       onClick,
     });
+    const keyboardNavigationRef = useElementsTreeKeyboardNavigation(tree);
+    const treeMergedRef = useMergeRefs<HTMLDivElement>(setTreeRootRef, keyboardNavigationRef);
 
     useImperativeHandle(ref, () => tree, [tree]);
 
@@ -172,7 +172,7 @@ export const ElementsTree = observer(
     return (
       <>
         <ElementsTreeTools tree={tree} settingsElements={settingsElements} />
-        <div ref={treeMergedRef} className={s(styles, { treeBox: true })}>
+        <DNDScrollContainer ref={treeMergedRef} className={s(styles, { treeBox: true })} isDragging={!!dndBox.state.context}>
           <ElementsTreeContext.Provider value={context}>
             <div className={s(styles, { box: true }, className)}>
               <FolderExplorer state={folderExplorer}>
@@ -210,7 +210,7 @@ export const ElementsTree = observer(
               </FolderExplorer>
             </div>
           </ElementsTreeContext.Provider>
-        </div>
+        </DNDScrollContainer>
       </>
     );
   }),

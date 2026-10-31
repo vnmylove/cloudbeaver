@@ -16,14 +16,14 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.EcSignatureConverter;
-import io.cloudbeaver.service.teleport.auth.JwkEntry;
-import io.cloudbeaver.service.teleport.auth.JwksProvider;
-import io.cloudbeaver.service.teleport.auth.TeleportJwtException;
-import io.cloudbeaver.service.teleport.auth.TeleportJwtVerifier;
+import io.cloudbeaver.service.auth.teleport.EcSignatureConverter;
+import io.cloudbeaver.service.auth.teleport.JwkEntry;
+import io.cloudbeaver.service.auth.teleport.JwksProvider;
+import io.cloudbeaver.service.auth.teleport.TeleportJwtException;
+import io.cloudbeaver.service.auth.teleport.TeleportJwtVerifier;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.security.Signature;
 import java.util.LinkedHashMap;
@@ -145,33 +145,33 @@ public class TeleportJwtVerifierTest {
         CountingProvider provider = new CountingProvider(support.entry());
         TeleportJwtVerifier verifier = new TeleportJwtVerifier(
             provider, JwtTestSupport.ISSUER, JwtTestSupport.AUDIENCE, 60);
-        Assert.assertThrows(
+        Assertions.assertThrows(
             TeleportJwtException.class,
             () -> verifier.verify(support.token(JwtTestSupport.validClaims())));
-        Assert.assertEquals(1, provider.lookups);
+        Assertions.assertEquals(1, provider.lookups);
     }
 
     @Test
     public void acceptsTokenWithoutKeyIdWhenEmptyKeyIdIsPublished() throws Exception {
         JwtTestSupport support = JwtTestSupport.ec();
         JwksProvider provider = kid -> {
-            Assert.assertEquals("", kid);
+            Assertions.assertEquals("", kid);
             return support.entry();
         };
         TeleportJwtVerifier verifier = new TeleportJwtVerifier(
             provider, JwtTestSupport.ISSUER, JwtTestSupport.AUDIENCE, 60);
 
         String token = support.token("ES256", "", JwtTestSupport.validClaims(), support.keyPair.getPrivate());
-        Assert.assertEquals("alice", verifier.verify(token).get("username"));
+        Assertions.assertEquals("alice", verifier.verify(token).get("username"));
 
         String withoutKid = tokenWithoutKid(support);
-        Assert.assertEquals("alice", verifier.verify(withoutKid).get("username"));
+        Assertions.assertEquals("alice", verifier.verify(withoutKid).get("username"));
     }
 
     private void assertValid(JwtTestSupport support) throws Exception {
         Map<String, Object> claims = verifier(support).verify(support.token(JwtTestSupport.validClaims()));
-        Assert.assertEquals("alice", claims.get("username"));
-        Assert.assertEquals(List.of("editor", "admin"), claims.get("roles"));
+        Assertions.assertEquals("alice", claims.get("username"));
+        Assertions.assertEquals(List.of("editor", "admin"), claims.get("roles"));
     }
 
     private TeleportJwtVerifier verifier(JwtTestSupport support) {
@@ -179,7 +179,7 @@ public class TeleportJwtVerifierTest {
     }
 
     private void assertRejected(JwtTestSupport support, String token) {
-        Assert.assertThrows(TeleportJwtException.class, () -> verifier(support).verify(token));
+        Assertions.assertThrows(TeleportJwtException.class, () -> verifier(support).verify(token));
     }
 
     private String tokenWithoutKid(JwtTestSupport support) throws Exception {

@@ -1,4 +1,13 @@
 export default [
+  ['plugin_authentication_administration_team_grant_manual', 'Администратор'],
+  ['plugin_authentication_administration_team_grant_provider', 'Провайдер аутентификации'],
+  ['plugin_authentication_administration_team_grant_default', 'Команда по умолчанию'],
+  ['plugin_authentication_administration_team_grant_manual_tooltip', 'Добавлен вручную администратором.'],
+  [
+    'plugin_authentication_administration_team_grant_default_tooltip',
+    'Пользователь добавлен автоматически, потому что эта команда выбрана в настройках как команда пользователей по умолчанию.',
+  ],
+  ['plugin_authentication_administration_team_grant_provider_tooltip', 'Назначено провайдером аутентификации и синхронизируется при входе.'],
   ['authentication_administration_pages_label', 'Страницы'],
   ['authentication_administration_user_connections_user_add', 'Создание пользователя'],
   ['authentication_administration_user_connections_user_new', 'Новый пользователь'],
@@ -35,6 +44,7 @@ export default [
   ['authentication_administration_users_filters_status_enabled', 'ВКЛЮЧЕН'],
   ['authentication_administration_users_filters_status_disabled', 'ВЫКЛЮЧЕН'],
   ['authentication_administration_users_filters_status_all', 'ВСЕ'],
+  ['authentication_administration_users_filters_filter_label', 'Фильтр'],
   ['authentication_administration_users_empty', 'Нет пользователей'],
   ['authentication_administration_users_delete_user', 'Удалить пользователя'],
   ['authentication_administration_users_delete_user_fail', 'Не удалось удалить пользователя'],
@@ -132,6 +142,10 @@ export default [
   ['administration_teams_team_granted_users_user_name', 'Имя пользователя'],
   ['administration_teams_team_granted_users_empty', 'Нет доступных пользователей'],
   ['administration_teams_team_granted_users_permission_denied', 'Вы не можете редактировать свои настройки доступа'],
+  [
+    'administration_teams_team_granted_users_only_admin_team',
+    'Вы не можете управлять своими правами доступа, поскольку это единственная команда администраторов, в которой вы состоите',
+  ],
 
   ['administration_teams_team_granted_connections_tab_title', 'Подключения'],
   ['administration_teams_team_granted_connections_search_placeholder', 'Поиск по названию подключения...'],
@@ -147,6 +161,7 @@ export default [
 
   ['plugin_authentication_administration_team_form_edit_label', 'Форма редактирования команды'],
   ['plugin_authentication_administration_user_form_edit_label', 'Форма редактирования пользователя'],
+  ['plugin_authentication_administration_user_last_login', 'Последний вход'],
 
   [
     'plugin_authentication_administration_user_username_validation_error',

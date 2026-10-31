@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -48,13 +48,14 @@ export class FormState<TState> implements IFormState<TState> {
   readonly formStateTask: IExecutor<TState>;
   readonly loadedTask: IExecutor<IFormState<TState>>;
   readonly submitTask: IExecutor<IFormState<TState>>;
+  readonly prepareTask: IExecutor<IFormState<TState>>;
   readonly formatTask: IExecutor<IFormState<TState>>;
   readonly validationTask: IExecutor<IFormState<TState>>;
   readonly disposeTask: IExecutor<IFormState<TState>>;
 
-  constructor(serviceProvider: IServiceProvider, service: FormBaseService<TState, any>, state: TState) {
+  constructor(serviceProvider: IServiceProvider, formBaseService: FormBaseService<TState, any>, state: TState) {
     this.id = uuid();
-    this.service = service;
+    this.service = formBaseService;
     this.dataContext = new DataContext();
 
     this.mode = FormMode.Create;
@@ -67,19 +68,22 @@ export class FormState<TState> implements IFormState<TState> {
     this.savingPromise = null;
 
     this.formStateTask = new Executor<TState>(state, () => true);
-    this.formStateTask.addCollection(service.onState).addPostHandler(this.updateFormState.bind(this));
+    this.formStateTask.addCollection(formBaseService.onState).addPostHandler(this.updateFormState.bind(this));
 
     this.loadedTask = new Executor(this as IFormState<TState>, () => true);
-    this.loadedTask.addCollection(service.onLoaded).next(this.formStateTask);
+    this.loadedTask.addCollection(formBaseService.onLoaded).next(this.formStateTask);
 
     this.formatTask = new Executor(this as IFormState<TState>, () => true);
-    this.formatTask.addCollection(service.onFormat);
+    this.formatTask.addCollection(formBaseService.onFormat);
+
+    this.prepareTask = new Executor(this as IFormState<TState>, () => true);
+    this.prepareTask.addCollection(formBaseService.onPrepare).before(this.formatTask);
 
     this.validationTask = new Executor(this as IFormState<TState>, () => true);
-    this.validationTask.addCollection(service.onValidate).before(this.formatTask);
+    this.validationTask.addCollection(formBaseService.onValidate).before(this.prepareTask);
 
     this.submitTask = new Executor(this as IFormState<TState>, () => true);
-    this.submitTask.addCollection(service.onSubmit).before(this.validationTask);
+    this.submitTask.addCollection(formBaseService.onSubmit).before(this.validationTask);
 
     this.disposeTask = new Executor(this as IFormState<TState>, () => true);
 

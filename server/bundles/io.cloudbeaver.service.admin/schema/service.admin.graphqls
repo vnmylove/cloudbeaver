@@ -1,3 +1,7 @@
+####################################################
+# Administration API
+####################################################
+
 "Describes the type of the administrative subject (user or team)"
 enum AdminSubjectType {
     "User"
@@ -24,6 +28,23 @@ type AdminUserTeamGrantInfo @since(version: "24.0.5"){
     userId: ID!
     "User role in the team"
     teamRole: String
+    "How the user was granted the team"
+    grantType: AdminTeamGrantType! @since(version: "26.3.0")
+    "User or authentication provider that granted the team"
+    grantedBy: ID! @since(version: "26.3.0")
+}
+
+enum AdminTeamGrantType @since(version: "26.3.0") {
+    MANUAL
+    AUTH_PROVIDER
+    DEFAULT
+}
+
+type AdminUserTeamInfo @since(version: "26.3.0") {
+    teamId: ID!
+    teamRole: String
+    grantType: AdminTeamGrantType!
+    grantedBy: ID!
 }
 
 "Set of permissions assigned to an object"
@@ -68,7 +89,9 @@ type AdminUserInfo {
     "User configuration parameters"
     configurationParameters: Object!
     "List of teams the user belongs to"
-    grantedTeams: [ID!]!
+    grantedTeams: [ID!]! @deprecated(reason: "use grantedTeamsInfo (26.3.0)")
+    "Detailed information about teams the user belongs to"
+    grantedTeamsInfo: [AdminUserTeamInfo!]! @since(version: "26.3.0")
     "List of connections the user has access to"
     grantedConnections: [AdminConnectionGrantInfo!]!
 
@@ -88,6 +111,8 @@ type AdminUserInfo {
     disabledBy: String @since(version: "25.0.2")
     "Reason why the user was disabled"
     disableReason: String @since(version: "25.0.2")
+    "Date of the user's last successful login"
+    lastLoginTime: DateTime @since(version: "26.1.1")
 
 }
 
@@ -104,7 +129,7 @@ type AdminTeamInfo {
     metaParameters: Object!
 
     "List of user identifiers that belong to the team"
-    grantedUsers: [ID!]!
+    grantedUsers: [ID!]! @deprecated(reason: "use grantedUsersInfo (24.0.5)")
     "Detailed information about users and their roles in the team"
     grantedUsersInfo: [AdminUserTeamGrantInfo!]! @since(version: "24.0.5")
     "List of connections assigned to this team"
@@ -199,6 +224,8 @@ input ServerConfigInput {
     publicCredentialsSaveEnabled: Boolean
     "Whether saving credentials is allowed"
     adminCredentialsSaveEnabled: Boolean
+    "Enables database user password changes."
+    dbUserPasswordChangeEnabled: Boolean @since(version: "26.2.2")
     "Whether the resource manager is enabled"
     resourceManagerEnabled: Boolean
     "Whether the secret manager is enabled"

@@ -5,7 +5,6 @@
     "./lib/module.js",
     "./lib/index.js",
     "src/**/*.css",
-    "src/**/*.scss",
     "public/**/*"
   ],
   "version": "0.1.0",
@@ -19,6 +18,7 @@
     "build": "tsc -b",
     "clean": "rimraf --glob lib",
     "lint": "eslint ./src/ --ext .ts,.tsx",
+    "test": "dbeaver-test",
     "validate-dependencies": "core-cli-validate-dependencies"
   },
   "dependencies": {
@@ -39,8 +39,10 @@
     "@cloudbeaver/plugin-navigation-tree": "workspace:*",
     "@cloudbeaver/plugin-object-viewer-nav-tree-link": "workspace:*",
     "@cloudbeaver/plugin-sql-editor": "workspace:*",
+    "@cloudbeaver/plugin-sql-editor-execution-plan": "workspace:*",
     "@cloudbeaver/plugin-sql-editor-navigation-tab-script": "workspace:*",
     "@cloudbeaver/plugin-top-app-bar": "workspace:*",
+    "@dbeaver/ui-kit": "workspace:^",
     "mobx": "^6",
     "mobx-react-lite": "^4",
     "react": "^19",
@@ -49,11 +51,16 @@
   },
   "devDependencies": {
     "@cloudbeaver/core-cli": "workspace:*",
+    "@cloudbeaver/tests-runner": "workspace:*",
     "@cloudbeaver/tsconfig": "workspace:*",
+    "@dbeaver/cli": "workspace:*",
+    "@dbeaver/react-tests": "workspace:*",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "react": "^19",
     "rimraf": "^6",
     "typescript": "^5",
-    "typescript-plugin-css-modules": "^5"
+    "typescript-plugin-css-modules": "^5",
+    "vitest": "^4"
   }
 }

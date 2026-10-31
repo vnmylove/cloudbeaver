@@ -72,20 +72,33 @@ public interface DBWServiceSQL extends DBWService {
         @NotNull WebSession session,
         @NotNull List<String> nodePathList) throws DBWebException;
 
+    @NotNull
     @WebAction
     String generateEntityQuery(
         @NotNull WebSession session,
         @NotNull String generatorId,
-        @NotNull Map<String, Object> options,
-        @NotNull List<String> nodePathList) throws DBWebException;
+        @NotNull List<String> nodePathList,
+        @NotNull WebSQLGeneratorOptions options
+    ) throws DBWebException;
 
+    @NotNull
+    @WebAction
+    WebAsyncTaskInfo asyncGenerateEntityQuery(
+        @NotNull WebSession session,
+        @NotNull String generatorId,
+        @NotNull List<String> nodePathList,
+        @NotNull WebSQLGeneratorOptions options
+    ) throws DBWebException;
+
+    @NotNull
     @WebAction
     String sqlGenerateResultSetQuery(
         @NotNull WebSession session,
         @NotNull WebSQLContextInfo sqlContext,
         @NotNull String generatorId,
         @NotNull String resultsId,
-        @NotNull List<WebSQLResultsRow> selectedRows
+        @NotNull List<WebSQLResultsRow> selectedRows,
+        @NotNull WebSQLGeneratorOptions options
     ) throws DBWebException;
 
     @WebAction
@@ -121,6 +134,14 @@ public interface DBWServiceSQL extends DBWService {
         @Nullable String resultId,
         @Nullable WebSQLDataFilter filter,
         @Nullable WebDataFormat dataFormat) throws DBWebException;
+
+    @WebAction
+    List<WebSQLQueryResultAssociation> getSqlResultAssociations(
+        @NotNull WebSession webSession,
+        @NotNull WebSQLContextInfo contextInfo,
+        @NotNull String resultsId,
+        @Nullable Boolean isReference
+    ) throws DBException;
 
     /**
      * Reads dynamic trace from provided database results.

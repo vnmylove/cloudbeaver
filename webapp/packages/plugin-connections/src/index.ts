@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,10 +9,10 @@
 import './module.js';
 
 export * from './ConnectionAuthentication/IConnectionAuthenticationConfig.js';
+export * from './ConnectionAuthentication/PROPERTY_FEATURE_SECURED.js';
 export * from './ConnectionAuthentication/ConnectionAuthenticationFormLoader.js';
 export * from './ConnectionForm/Options/ConnectionOptionsTabService.js';
 export * from './ConnectionForm/DriverProperties/ConnectionDriverPropertiesTabService.js';
-export * from './ConnectionForm/SSH/ConnectionSSHTabService.js';
 export * from './ConnectionForm/OriginInfo/ConnectionOriginInfoTabService.js';
 export * from './ConnectionForm/ConnectionFormBaseActionsLoader.js';
 export * from './ConnectionForm/ConnectionFormLoader.js';
@@ -20,8 +20,10 @@ export * from './ConnectionForm/IConnectionFormState.js';
 export * from './ConnectionForm/ConnectionFormState.js';
 export * from './ConnectionForm/useConnectionFormState.js';
 export * from './ConnectionForm/ConnectionFormService.js';
+export * from './ConnectionForm/CONNECTION_CONFIG_SCHEMA.js';
 export * from './ConnectionForm/Options/getConnectionFormOptionsPart.js';
 export * from './ConnectionForm/Options/ConnectionFormOptionsPart.js';
+export * from './ConnectionForm/ConnectionSectionWrapperLazy.js';
 export * from './ConnectionForm/SharedCredentials/CONNECTION_FORM_SHARED_CREDENTIALS_TAB_ID.js';
 export * from './ConnectionForm/ConnectionAuthModelCredentials/ConnectionAuthModelCredentialsForm.js';
 export * from './ContextMenu/MENU_CONNECTIONS.js';

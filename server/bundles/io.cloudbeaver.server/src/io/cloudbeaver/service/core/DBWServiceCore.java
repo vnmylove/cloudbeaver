@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
+import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.model.connection.DBPConnectionType;
 import org.jkiss.dbeaver.model.rm.RMConstants;
 import org.jkiss.dbeaver.registry.DataSourceNavigatorSettings;
 import org.jkiss.dbeaver.registry.settings.ProductSettingDescriptor;
@@ -36,7 +38,8 @@ import java.util.Map;
  */
 public interface DBWServiceCore extends DBWService {
 
-    @WebAction(authRequired = false, initializationRequired = false)
+    @NotNull
+    @WebAction(authRequired = false, initializationRequired = false, configurationModeAllowed = true)
     WebServerConfig getServerConfig(@Nullable WebSession webSession) throws DBWebException;
 
     /**
@@ -48,8 +51,9 @@ public interface DBWServiceCore extends DBWService {
     @WebAction
     WebGroupPropertiesInfo<ProductSettingDescriptor> getProductSettings(@NotNull WebSession webSession);
 
-    @WebAction
-    List<WebDatabaseDriverInfo> getDriverList(@NotNull WebSession webSession, String driverId) throws DBWebException;
+    @NotNull
+    @WebAction(configurationModeAllowed = true)
+    List<WebDatabaseDriverInfo> getDriverList(@NotNull WebSession webSession, @Nullable String driverId) throws DBWebException;
 
     @WebAction
     List<WebDatabaseAuthModel> getAuthModels(@NotNull WebSession webSession);
@@ -68,20 +72,23 @@ public interface DBWServiceCore extends DBWService {
     List<WebConnectionFolderInfo> getConnectionFolders(
         @NotNull WebSession webSession, @Nullable String projectId, @Nullable String id) throws DBWebException;
 
-    @WebAction(authRequired = false)
+    @NotNull
+    @WebAction(authRequired = false, configurationModeAllowed = true)
     String[] getSessionPermissions(@NotNull WebSession webSession) throws DBWebException;
 
     ///////////////////////////////////////////
     // Session
 
-    @WebAction(authRequired = false)
+    @NotNull
+    @WebAction(authRequired = false, configurationModeAllowed = true)
     WebSession openSession(
         @NotNull WebSession webSession,
         @Nullable String defaultLocale,
         @NotNull HttpServletRequest servletRequest,
         @NotNull HttpServletResponse servletResponse) throws DBWebException;
 
-    @WebAction(authRequired = false)
+    @NotNull
+    @WebAction(authRequired = false, configurationModeAllowed = true)
     WebSession getSessionState(@NotNull WebSession webSession) throws DBWebException;
 
     @WebAction
@@ -102,11 +109,20 @@ public interface DBWServiceCore extends DBWService {
     @WebAction(authRequired = false)
     boolean refreshSessionConnections(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) throws DBWebException;
 
-    @WebAction
-    boolean changeSessionLanguage(@NotNull WebSession webSession, String locale) throws DBWebException;
+    @WebAction(configurationModeAllowed = true)
+    boolean changeSessionLanguage(@NotNull WebSession webSession, @Nullable String locale) throws DBWebException;
 
     ///////////////////////////////////////////
     // Connections
+    @NotNull
+    WebPropertyInfo[] getDriverProperties(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @NotNull Map<String, Object> connectionConfig
+    ) throws DBWebException;
+
+    @NotNull
+    List<DBPConnectionType> getConnectionTypes(@NotNull WebSession webSession, @Nullable String id);
 
     @WebAction
     WebConnectionInfo getConnectionState(WebSession webSession, @Nullable String projectId, String connectionId) throws DBWebException;
@@ -152,15 +168,29 @@ public interface DBWServiceCore extends DBWService {
         @NotNull Map<String, Object> connectionConfig
     ) throws DBWebException;
 
-    @WebAction
+    @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
     WebConnectionInfo testConnection(
         @NotNull WebSession webSession,
-        @Nullable String projectId,
+        @Nullable @WebObjectId String projectId,
         @NotNull Map<String, Object> connectionConfig
     ) throws DBWebException;
 
-    @WebAction
-    WebNetworkEndpointInfo testNetworkHandler(@NotNull WebSession webSession, @NotNull WebNetworkHandlerConfigInput nhConfig) throws DBWebException;
+    @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
+    boolean changeConnectionUserPassword(
+        @NotNull WebSession webSession,
+        @Nullable @WebObjectId String projectId,
+        @NotNull String connectionId,
+        @WebParameterSecure @NotNull String oldPassword,
+        @WebParameterSecure @NotNull String newPassword
+    ) throws DBWebException;
+
+    @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
+    WebNetworkEndpointInfo testNetworkHandler(
+        @NotNull WebSession webSession,
+        @Nullable @WebObjectId String projectId,
+        @Nullable String connectionId,
+        @NotNull WebNetworkHandlerConfigInput nhConfig
+    ) throws DBWebException;
 
     @WebAction
     WebConnectionInfo closeConnection(@NotNull WebSession webSession, @Nullable String projectId, @NotNull String connectionId) throws DBWebException;
@@ -213,13 +243,26 @@ public interface DBWServiceCore extends DBWService {
         @NotNull String id
     ) throws DBWebException;
 
+    @NotNull
+    Map<String, String> setObjectSettingsForDatasource(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @NotNull String objectId,
+        @NotNull Map<String, String> settings
+    ) throws DBException;
+
     ///////////////////////////////////////////
     // Async tasks
 
-    @WebAction(authRequired = false)
-    WebAsyncTaskInfo getAsyncTaskInfo(WebSession webSession, String taskId, Boolean removeOnFinish) throws DBWebException;
+    @NotNull
+    @WebAction(authRequired = false, configurationModeAllowed = true)
+    WebAsyncTaskInfo getAsyncTaskInfo(
+        @NotNull WebSession webSession,
+        @NotNull String taskId,
+        @Nullable Boolean removeOnFinish
+    ) throws DBWebException;
 
-    @WebAction(authRequired = false)
-    boolean cancelAsyncTask(WebSession webSession, String taskId) throws DBWebException;
+    @WebAction(authRequired = false, configurationModeAllowed = true)
+    boolean cancelAsyncTask(@NotNull WebSession webSession, @NotNull String taskId) throws DBWebException;
 
 }

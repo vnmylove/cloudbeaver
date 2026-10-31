@@ -1,0 +1,4 @@
+fragment ConnectionInfoAiSettings on AIDataSourceSettingsInfo {
+  metaTransferConfirmed
+  scope
+}

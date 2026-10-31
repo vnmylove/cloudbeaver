@@ -16,14 +16,14 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.TeleportConstants;
-import io.cloudbeaver.service.teleport.auth.TeleportJwtAuthProvider;
-import io.cloudbeaver.service.teleport.auth.TeleportSettings;
+import io.cloudbeaver.service.auth.teleport.TeleportConstants;
+import io.cloudbeaver.service.auth.teleport.TeleportJwtAuthProvider;
+import io.cloudbeaver.service.auth.teleport.TeleportSettings;
 
 import io.cloudbeaver.auth.SMAutoAssign;
 import org.jkiss.dbeaver.model.security.SMAuthProviderCustomConfiguration;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,14 +42,14 @@ public class TeleportJwtAuthProviderTest {
         Map<String, Object> first = provider.authExternalUser(null, configuration(), credentials);
         Map<String, Object> second = provider.authExternalUser(null, configuration(), first);
 
-        Assert.assertEquals(first, second);
-        Assert.assertEquals(List.of("editor", "admin"), second.get(TeleportConstants.CRED_TEAMS));
-        Assert.assertEquals("alice", credentials.get(TeleportConstants.CRED_USER));
+        Assertions.assertEquals(first, second);
+        Assertions.assertEquals(List.of("editor", "admin"), second.get(TeleportConstants.CRED_TEAMS));
+        Assertions.assertEquals("alice", credentials.get(TeleportConstants.CRED_USER));
     }
 
     @Test
     public void rejectsMissingUserName() {
-        Assert.assertThrows(
+        Assertions.assertThrows(
             Exception.class,
             () -> provider.authExternalUser(null, configuration(), Map.of()));
     }
@@ -57,8 +57,8 @@ public class TeleportJwtAuthProviderTest {
     @Test
     public void returnsNoAssignmentsWhenConfigurationIsMissing() throws Exception {
         SMAutoAssign assignments = provider.detectAutoAssignments(null, null, Map.of());
-        Assert.assertTrue(assignments.getExternalTeamIds().isEmpty());
-        Assert.assertNull(assignments.getAuthRole());
+        Assertions.assertTrue(assignments.getExternalTeamIds().isEmpty());
+        Assertions.assertNull(assignments.getAuthRole());
     }
 
     @Test
@@ -75,14 +75,14 @@ public class TeleportJwtAuthProviderTest {
             TeleportConstants.CRED_TEAMS, List.of("prefix-editor", "prefix-admin", "other"));
 
         SMAutoAssign assignments = provider.detectAutoAssignments(null, configuration, credentials);
-        Assert.assertEquals(List.of("editor", "admin"), assignments.getExternalTeamIds());
+        Assertions.assertEquals(List.of("editor", "admin"), assignments.getExternalTeamIds());
     }
 
     @Test
     public void splitsTeamIdsProvidedAsText() throws Exception {
         Map<String, Object> credentials = Map.of(TeleportConstants.CRED_TEAMS, "editor, admin,");
         SMAutoAssign assignments = provider.detectAutoAssignments(null, configuration(), credentials);
-        Assert.assertEquals(List.of("editor", "admin"), assignments.getExternalTeamIds());
+        Assertions.assertEquals(List.of("editor", "admin"), assignments.getExternalTeamIds());
     }
 
     @Test
@@ -94,20 +94,20 @@ public class TeleportJwtAuthProviderTest {
 
         SMAutoAssign assignments = provider.detectAutoAssignments(
             null, configuration, Map.of("cbRole", "admin"));
-        Assert.assertEquals("admin", assignments.getAuthRole());
+        Assertions.assertEquals("admin", assignments.getAuthRole());
     }
 
     @Test
     public void reportsTeamMetadataField() {
-        Assert.assertEquals(TeleportConstants.TEAM_METADATA_FIELD, provider.getExternalTeamIdMetadataFieldName());
+        Assertions.assertEquals(TeleportConstants.TEAM_METADATA_FIELD, provider.getExternalTeamIdMetadataFieldName());
     }
 
     @Test
     public void rejectsConfigurationWithoutRequiredValues() {
-        Assert.assertThrows(IllegalArgumentException.class, () -> new TeleportSettings(null));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new TeleportSettings(null));
         SMAuthProviderCustomConfiguration configuration = new SMAuthProviderCustomConfiguration("teleport");
         configuration.setParameters(Map.of(TeleportConstants.PARAM_JWKS_URL, "https://teleport.example/jwks"));
-        Assert.assertThrows(IllegalArgumentException.class, () -> new TeleportSettings(configuration));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new TeleportSettings(configuration));
     }
 
     private static SMAuthProviderCustomConfiguration configuration() {

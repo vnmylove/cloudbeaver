@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ export * from './PermissionsService.js';
 export * from './ProductInfoResource.js';
 export * from './ServerConfigResource.js';
 export * from './WorkspaceConfigEventHandler.js';
+export * from './ObjectSettingsEventHandler.js';
 export * from './SessionEventSource.js';
 export * from './QuotasService.js';
 export * from './SessionResource.js';
@@ -48,3 +49,4 @@ export * from './ServerLicenseStatusResource.js';
 export * from './AsyncTask/AsyncTask.js';
 export * from './AsyncTask/AsyncTaskInfoEventHandler.js';
 export * from './AsyncTask/AsyncTaskInfoService.js';
+export * from './getCurrentDomain.js';

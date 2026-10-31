@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,6 +81,18 @@ public class WebServiceBindingCore extends WebServiceBindingBase<DBWServiceCore>
                     getArgument(env, "maxEntries"),
                     getArgument(env, "clearEntries"));
             })
+            .dataFetcher(
+                "listConnectionDriverProperties", env -> getService(env).getDriverProperties(
+                    getWebSession(env),
+                    getArgumentVal(env, "projectId"),
+                    getArgumentVal(env, "config")
+                )
+            ).dataFetcher(
+                "listConnectionTypes", env -> getService(env).getConnectionTypes(
+                    getWebSession(env),
+                    getArgument(env, "id")
+                )
+            )
         ;
 
         model.getMutationType()
@@ -138,8 +150,18 @@ public class WebServiceBindingCore extends WebServiceBindingBase<DBWServiceCore>
             .dataFetcher("testConnection", env -> getService(env).testConnection(
                 getWebSession(env), getProjectReference(env), getArgumentVal(env, "config")
             ))
+            .dataFetcher("changeConnectionUserPassword", env -> getService(env).changeConnectionUserPassword(
+                getWebSession(env),
+                getProjectReference(env),
+                getArgumentVal(env, "connectionId"),
+                getArgumentVal(env, "oldPassword"),
+                getArgumentVal(env, "newPassword")
+            ))
             .dataFetcher("testNetworkHandler", env -> getService(env).testNetworkHandler(
-                getWebSession(env), new WebNetworkHandlerConfigInput(getArgument(env, "config"))
+                getWebSession(env),
+                getProjectReference(env),
+                getArgument(env, "connectionId"),
+                new WebNetworkHandlerConfigInput(getArgument(env, "config"))
             ))
             .dataFetcher("closeConnection", env -> getService(env).closeConnection(
                 getWebSession(env),
@@ -160,6 +182,12 @@ public class WebServiceBindingCore extends WebServiceBindingBase<DBWServiceCore>
                     getArgumentVal(env, "id")
                 )
             )
+            .dataFetcher("setObjectSettingsForDatasource", env -> getService(env).setObjectSettingsForDatasource(
+                getWebSession(env),
+                getProjectReference(env),
+                getArgumentVal(env, "id"),
+                getArgumentVal(env, "settings")
+            ))
 
             .dataFetcher("asyncTaskInfo", env -> getService(env).getAsyncTaskInfo(
                 getWebSession(env),

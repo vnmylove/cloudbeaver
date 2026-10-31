@@ -1,4 +1,13 @@
 export default [
+  ['plugin_authentication_administration_team_grant_manual', 'Amministratore'],
+  ['plugin_authentication_administration_team_grant_provider', 'Provider di autenticazione'],
+  ['plugin_authentication_administration_team_grant_default', 'Team predefinito'],
+  ['plugin_authentication_administration_team_grant_manual_tooltip', 'Aggiunto manualmente da un amministratore.'],
+  [
+    'plugin_authentication_administration_team_grant_default_tooltip',
+    'L’utente è stato aggiunto automaticamente perché questo team è configurato come team predefinito per gli utenti.',
+  ],
+  ['plugin_authentication_administration_team_grant_provider_tooltip', 'Assegnata dal provider di autenticazione e sincronizzata all’accesso.'],
   ['authentication_administration_pages_label', 'Pagine'],
   ['authentication_administration_user_connections_user_add', 'Creazione di Utente'],
   ['authentication_administration_user_connections_user_new', 'Nuovo utente'],
@@ -31,6 +40,7 @@ export default [
   ['authentication_administration_users_filters_status_enabled', 'ENABLED'],
   ['authentication_administration_users_filters_status_disabled', 'DISABLED'],
   ['authentication_administration_users_filters_status_all', 'ALL'],
+  ['authentication_administration_users_filters_filter_label', 'Filter'],
   ['authentication_administration_users_empty', 'There are no users'],
   ['authentication_administration_users_delete_user', 'Delete user'],
   ['authentication_administration_users_delete_user_fail', 'Failed to delete user'],
@@ -80,12 +90,17 @@ export default [
   ['administration_identity_providers_provider_configuration_description', 'Descrizione'],
 
   ['plugin_authentication_administration_user_team_default_readonly_tooltip', "Default team. Can't be revoked"],
+  [
+    'administration_teams_team_granted_users_only_admin_team',
+    "Non puoi gestire i tuoi permessi perché è l'unico team di amministrazione a cui partecipi",
+  ],
   ['plugin_authentication_administration_team_default_users_tooltip', 'Default team. Contains all users'],
   ['plugin_authentication_administration_team_user_team_role_supervisor', 'Supervisor'],
   ['plugin_authentication_administration_team_user_team_role_supervisor_description', 'Supervisors can view their team’s executed queries'],
 
   ['plugin_authentication_administration_team_form_edit_label', 'Team editing form'],
   ['plugin_authentication_administration_user_form_edit_label', 'User editing form'],
+  ['plugin_authentication_administration_user_last_login', 'Ultimo accesso'],
 
   [
     'plugin_authentication_administration_user_username_validation_error',

@@ -59,7 +59,7 @@ export const NavigationNodeControl: NavTreeControlComponent = observer(
     const elementsTreeContext = useContext(ElementsTreeContext);
     const navNodeInfoResource = useService(NavNodeInfoResource);
     const navTreeResource = useService(NavTreeResource);
-    const error = getComputed(() => !!navNodeInfoResource.getException(node.id) || !!navTreeResource.getException(node.id));
+    const error = getComputed(() => !!navNodeInfoResource.getException(node.uri) || !!navTreeResource.getException(node.uri));
     const selected = treeNodeContext.selected;
     const hoverHook = useHover();
     const mergedRef = useMergeRefs(hoverHook.ref, ref);
@@ -126,12 +126,16 @@ export const NavigationNodeControl: NavTreeControlComponent = observer(
 
     function handlePortalClick(event: React.MouseEvent<HTMLDivElement>) {
       EventContext.set(event, EventStopPropagationFlag);
-      treeNodeContext.select();
+      if (!treeNodeContext.selected) {
+        treeNodeContext.select();
+      }
     }
 
     function handleContextMenuOpen(event: React.MouseEvent<HTMLDivElement>) {
       contextMenuPosition.open(event);
-      treeNodeContext.select();
+      if (!treeNodeContext.selected) {
+        treeNodeContext.select();
+      }
     }
 
     const { editing, saving } = editingState;
@@ -147,7 +151,7 @@ export const NavigationNodeControl: NavTreeControlComponent = observer(
         onClick={onClick}
         onContextMenu={handleContextMenuOpen}
       >
-        <NavigationNodeExpand nodeId={node.id} />
+        <NavigationNodeExpand nodeId={node.uri} />
         <TreeNodeIcon icon={icon} />
         <TreeNodeName title={title} className={s(styles, { treeNodeName: true })}>
           <Loader suspense inline fullSize>

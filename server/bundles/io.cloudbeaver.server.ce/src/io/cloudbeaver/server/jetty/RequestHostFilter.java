@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
 
 public class RequestHostFilter implements Filter {
     private static final Log log = Log.getLog(RequestHostFilter.class);
@@ -74,9 +75,19 @@ public class RequestHostFilter implements Filter {
                 chain.doFilter(request, response);
                 return;
             }
-            boolean isIpAddress = InetAddresses.isInetAddress(originUri.getHost());
+
+            if (CommonUtils.isNotEmpty(originUri.getHost())) {
+                requestAllowed = InetAddresses.isInetAddress(originUri.getHost());
+            } else {
+                log.debug(
+                    "Request origin host is null, request URI - " + originUri +
+                        ", request path - " + httpRequest.getServletPath() +
+                        ", request url - " + httpRequest.getRequestURL()
+                );
+
+            }
+
             String servletPath = httpRequest.getServletPath();
-            requestAllowed = isIpAddress;
             if (!requestAllowed) {
                 if (CommonUtils.isNotEmpty(servletPath)) {
                     for (String excludedPath : excludedPaths) {
@@ -145,10 +156,10 @@ public class RequestHostFilter implements Filter {
             if (!availableHosts.contains(requestHost)) {
                 for (String errorPath : errorPaths) {
                     if (httpRequest.getServletPath().contains(errorPath)) {
+                        log.warn("Request host '" + requestHost + "' is not allowed. Available hosts: " + availableHosts);
                         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write(
-                            "Request host '" + requestHost + "' is not allowed. Available hosts: " + availableHosts
-                        );
+                        response.setContentType("text/plain;charset=UTF-8");
+                        response.getWriter().write("Request host is not allowed. Available hosts: " + availableHosts);
                         return false;
                     }
                 }

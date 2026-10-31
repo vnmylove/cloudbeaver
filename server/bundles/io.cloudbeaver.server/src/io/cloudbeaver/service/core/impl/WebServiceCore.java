@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,18 +34,27 @@ import io.cloudbeaver.utils.WebConnectionFolderUtils;
 import io.cloudbeaver.utils.WebDataSourceUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.eclipse.core.runtime.IAdaptable;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBConstants;
+import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.DBPDataSourceFolder;
+import org.jkiss.dbeaver.model.DBPErrorAssistant;
+import org.jkiss.dbeaver.model.access.DBAPasswordChangeInfo;
+import org.jkiss.dbeaver.model.access.DBAuthUtils;
+import org.jkiss.dbeaver.model.access.DBAUserPasswordManager;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.auth.SMObjectType;
 import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
+import org.jkiss.dbeaver.model.connection.DBPConnectionType;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.exec.DBCConnectException;
+import org.jkiss.dbeaver.model.exec.DBExecUtils;
 import org.jkiss.dbeaver.model.navigator.DBNDataSource;
 import org.jkiss.dbeaver.model.navigator.DBNModel;
 import org.jkiss.dbeaver.model.navigator.DBNNode;
@@ -64,6 +73,7 @@ import org.jkiss.dbeaver.registry.DataSourceNavigatorSettingsUtils;
 import org.jkiss.dbeaver.registry.DataSourceProviderRegistry;
 import org.jkiss.dbeaver.registry.network.NetworkHandlerDescriptor;
 import org.jkiss.dbeaver.registry.network.NetworkHandlerRegistry;
+import org.jkiss.dbeaver.registry.project.BaseProjectSettings;
 import org.jkiss.dbeaver.registry.settings.ProductSettingDescriptor;
 import org.jkiss.dbeaver.registry.settings.ProductSettingsRegistry;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -80,7 +90,6 @@ import java.util.stream.Collectors;
 public class WebServiceCore implements DBWServiceCore {
 
     private static final Log log = Log.getLog(WebServiceCore.class);
-
     @Override
     public WebServerConfig getServerConfig(@Nullable WebSession webSession) {
         WebServerConfig webServerConfig = WebAppUtils.getWebApplication().getWebServerConfig();
@@ -147,6 +156,7 @@ public class WebServiceCore implements DBWServiceCore {
         Set<String> applicableDrivers = WebServiceUtils.getApplicableDriversIds();
         return stream
             .flatMap(p -> p.getConnections().stream())
+            .filter(c -> !c.getDataSourceContainer().isHidden())
             .filter(c -> applicableDrivers.contains(c.getDataSourceContainer().getDriver().getId()))
             .toList();
     }
@@ -294,6 +304,46 @@ public class WebServiceCore implements DBWServiceCore {
         return WebDataSourceUtils.getWebConnectionInfo(webSession, projectId, connectionId);
     }
 
+    @NotNull
+    @Override
+    public WebPropertyInfo[] getDriverProperties(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @NotNull Map<String, Object> connectionConfig
+    ) throws DBWebException {
+        WebSessionProjectImpl project = getProjectById(webSession, projectId);
+        WebConnectionConfig configInput = project.getConnectionConfigInput(connectionConfig);
+
+        configInput.setSaveCredentials(true); // It is used in createConnectionFromConfig
+
+        DataSourceDescriptor dataSource = (DataSourceDescriptor) WebDataSourceUtils.getLocalOrGlobalDataSource(
+            webSession, projectId, configInput.getConnectionId());
+        try {
+            DataSourceDescriptor testDataSource = getDataSourceDescriptor(webSession, dataSource, configInput, project, false);
+            DBPConnectionConfiguration connectionConfiguration
+                = new DBPConnectionConfiguration(testDataSource.getConnectionConfiguration());
+            return WebServiceUtils.getDriverProperties(
+                webSession,
+                testDataSource.getDriver(),
+                testDataSource,
+                connectionConfiguration
+            );
+        } catch (DBWebException e) {
+            log.error("Error getting driver properties", e);
+            return new WebPropertyInfo[0];
+        }
+
+    }
+
+    @NotNull
+    @Override
+    public List<DBPConnectionType> getConnectionTypes(@NotNull WebSession webSession, @Nullable String id) {
+        return DataSourceProviderRegistry.getInstance().getConnectionTypes().stream()
+            .map(ct -> id == null || id.equals(ct.getId()) ? ct : null)
+            .filter(Objects::nonNull)
+            .toList();
+    }
+
 
     @Override
     public WebConnectionInfo initConnection(
@@ -332,6 +382,7 @@ public class WebServiceCore implements DBWServiceCore {
         }
 
         boolean oldSavePassword = dataSourceContainer.isSavePassword();
+        boolean preserveNetworkCredentialsForPasswordRecovery = false;
         DBRProgressMonitor monitor = webSession.getProgressMonitor();
         validateDriverLibrariesPresence(dataSourceContainer);
         try {
@@ -344,10 +395,22 @@ public class WebServiceCore implements DBWServiceCore {
                     throwDriverNotFoundException(dataSourceContainer);
                 }
             }
+            if (discoverErrorType(dataSourceContainer, e) == DBPErrorAssistant.ErrorType.PASSWORD_EXPIRED) {
+                preserveNetworkCredentialsForPasswordRecovery = true;
+                throw new DBWebException(
+                    "Database password has expired",
+                    DBWebException.ERROR_CODE_PASSWORD_EXPIRED,
+                    e
+                );
+            }
             throw new DBWebException("Error connecting to database", e);
         } finally {
             dataSourceContainer.setSavePassword(oldSavePassword);
-            connectionInfo.clearCache();
+            if (preserveNetworkCredentialsForPasswordRecovery) {
+                connectionInfo.setSavedCredentials(null, connectionInfo.getSavedNetworkCredentials());
+            } else {
+                connectionInfo.clearCache();
+            }
         }
         // Mark all specified network configs as saved
         boolean[] saveConfig = new boolean[1];
@@ -464,6 +527,11 @@ public class WebServiceCore implements DBWServiceCore {
                 throw new DBException("Node '" + nodePath + "' is not a datasource node");
             }
             DBPDataSourceContainer dataSourceTemplate = dbnDataSource.getDataSourceContainer();
+            if (!dataSourceTemplate.isExternallyProvided()) {
+                if (!CommonUtils.equalObjects(dataSourceTemplate.getProject(), project)) {
+                    throw new DBException("Copying connection to another project is not allowed");
+                }
+            }
 
             DataSourceDescriptor newDataSource = dataSourceRegistry.createDataSource(dataSourceTemplate);
 
@@ -506,25 +574,66 @@ public class WebServiceCore implements DBWServiceCore {
 
         configInput.setSaveCredentials(true); // It is used in createConnectionFromConfig
 
-        DataSourceDescriptor dataSource = (DataSourceDescriptor) WebDataSourceUtils.getLocalOrGlobalDataSource(
-            webSession, projectId, configInput.getConnectionId());
-
-        DataSourceDescriptor testDataSource;
-        if (dataSource != null) {
-            try {
-                // Check that creds are saved to trigger secrets resolve
-                dataSource.isCredentialsSaved();
-            } catch (DBException e) {
-                throw new DBWebException("Can't determine whether datasource credentials are saved", e);
+        WebConnectionInfo cachedConnection = project.findWebConnectionInfo(configInput.getConnectionId());
+        DataSourceDescriptor dataSource = cachedConnection == null ?
+            (DataSourceDescriptor) WebDataSourceUtils.getLocalOrGlobalDataSource(
+                webSession, projectId, configInput.getConnectionId()) :
+            (DataSourceDescriptor) cachedConnection.getDataSourceContainer();
+        DataSourceDescriptor testDataSource = getDataSourceDescriptor(webSession, dataSource, configInput, project, true);
+        testDataSource.setTemporary(true);
+        WebConnectionInfo connectionInfo = project.createConnectionInfo(testDataSource);
+        connectionInfo.setSavedCredentials(configInput.getCredentials(), configInput.getNetworkHandlersConfig());
+        try {
+            ConnectionTestJob ct = new ConnectionTestJob(
+                testDataSource, param -> {
             }
-
-            testDataSource = (DataSourceDescriptor) dataSource.createCopy(dataSource.getRegistry());
-            WebDataSourceUtils.setConnectionConfiguration(
-                testDataSource.getDriver(),
-                testDataSource.getConnectionConfiguration(),
-                configInput
             );
-            if (configInput.getSelectedSecretId() != null) {
+            ct.run(webSession.getProgressMonitor());
+            if (ct.getConnectError() != null) {
+                if (ct.getConnectError() instanceof DBCConnectException error) {
+                    Throwable rootCause = CommonUtils.getRootCause(error);
+                    if (rootCause instanceof ClassNotFoundException) {
+                        log.error(error);
+                        throwDriverNotFoundException(testDataSource);
+                    }
+                }
+                throw new DBWebException("Connection failed", ct.getConnectError());
+            }
+            connectionInfo.setConnectError(ct.getConnectError());
+            connectionInfo.setServerVersion(ct.getServerVersion());
+            connectionInfo.setClientVersion(ct.getClientVersion());
+            connectionInfo.setConnectTime(RuntimeUtils.formatExecutionTime(ct.getConnectTime()));
+            return connectionInfo;
+        } catch (DBException e) {
+            throw new DBWebException("Error connecting to database", e);
+        }
+    }
+
+    @NotNull
+    private DataSourceDescriptor getDataSourceDescriptor(
+        @NotNull WebSession webSession,
+        @Nullable DataSourceDescriptor dataSource,
+        @NotNull WebConnectionConfig configInput,
+        @NotNull WebSessionProjectImpl project,
+        boolean resetCredentialsOnTargetChange
+    ) throws DBWebException {
+        DataSourceDescriptor testDataSource;
+        boolean connectionTargetChanged = resetCredentialsOnTargetChange &&
+            webSession.getApplication().getAppConfiguration()
+                .isFeatureEnabled(DBWConstants.FEATURE_RESET_CREDENTIALS_ON_TARGET_CHANGE) &&
+            dataSource != null &&
+            project.isConnectionTargetChanged(configInput, dataSource);
+        if (dataSource != null) {
+            if (!connectionTargetChanged) {
+                try {
+                    // Check that creds are saved to trigger secrets resolve
+                    dataSource.isCredentialsSaved();
+                } catch (DBException e) {
+                    throw new DBWebException("Can't determine whether datasource credentials are saved", e);
+                }
+            }
+            testDataSource = project.getDataSourceContainerFromInput(configInput, dataSource, connectionTargetChanged);
+            if (!connectionTargetChanged && configInput.getSelectedSecretId() != null) {
                 try {
                     dataSource.listSharedCredentials()
                         .stream()
@@ -549,43 +658,281 @@ public class WebServiceCore implements DBWServiceCore {
             testDataSource = project.getDataSourceContainerFromInput(configInput);
         }
         validateDriverLibrariesPresence(testDataSource);
-        webSession.provideAuthParameters(
-            webSession.getProgressMonitor(),
-            testDataSource,
-            testDataSource.getConnectionConfiguration()
-        );
+        if (connectionTargetChanged) {
+            // Server-side credential providers must not supply secrets to a client-controlled target.
+            webSession.provideInputAuthParameters(
+                webSession.getProgressMonitor(),
+                testDataSource,
+                testDataSource.getConnectionConfiguration()
+            );
+        } else {
+            webSession.provideAuthParameters(
+                webSession.getProgressMonitor(),
+                testDataSource,
+                testDataSource.getConnectionConfiguration()
+            );
+        }
         testDataSource.setSavePassword(true); // We need for test to avoid password callback
         testDataSource.setAccessCheckRequired(!webSession.hasPermission(DBWConstants.PERMISSION_ADMIN));
+        return testDataSource;
+    }
+
+    @Override
+    public boolean changeConnectionUserPassword(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull String connectionId,
+        @NotNull String oldPassword,
+        @NotNull String newPassword
+    ) throws DBWebException {
+        DBPDataSourceContainer container = null;
         try {
-            ConnectionTestJob ct = new ConnectionTestJob(
-                testDataSource, param -> {
-            }
-            );
-            ct.run(webSession.getProgressMonitor());
-            if (ct.getConnectError() != null) {
-                if (ct.getConnectError() instanceof DBCConnectException error) {
-                    Throwable rootCause = CommonUtils.getRootCause(error);
-                    if (rootCause instanceof ClassNotFoundException) {
-                        log.error(error);
-                        throwDriverNotFoundException(testDataSource);
-                    }
+            requireServerFlagEnabled();
+            container = resolveContainer(webSession, projectId, connectionId);
+            synchronized (container) {
+                String userName = resolveUserName(container);
+                if (container.isConnected()) {
+                    DBAUserPasswordManager manager = resolveUserPasswordManager(container);
+                    applyPasswordChange(webSession, projectId, connectionId, container, manager, userName, oldPassword, newPassword);
+                } else {
+                    changePasswordUsingTemporaryConnection(
+                        webSession,
+                        projectId,
+                        connectionId,
+                        container,
+                        userName,
+                        oldPassword,
+                        newPassword
+                    );
                 }
-                throw new DBWebException("Connection failed", ct.getConnectError());
+                try {
+                    persistNewPassword(webSession, container, projectId, connectionId, newPassword);
+                } finally {
+                    cleanupAfterPasswordChange(webSession, container, projectId, connectionId);
+                }
             }
-            WebConnectionInfo connectionInfo = project.createConnectionInfo(testDataSource);
-            connectionInfo.setConnectError(ct.getConnectError());
-            connectionInfo.setServerVersion(ct.getServerVersion());
-            connectionInfo.setClientVersion(ct.getClientVersion());
-            connectionInfo.setConnectTime(RuntimeUtils.formatExecutionTime(ct.getConnectTime()));
-            return connectionInfo;
-        } catch (DBException e) {
-            throw new DBWebException("Error connecting to database", e);
+            log.info("changeConnectionUserPassword: succeeded " + formatPasswordChangeLogContext(webSession, projectId, connectionId));
+            return true;
+        } catch (DBWebException e) {
+            throw e;
+        } catch (Throwable t) {
+            log.error("changeConnectionUserPassword: unexpected error " + formatPasswordChangeLogContext(webSession, projectId, connectionId), t);
+            throw new DBWebException("Password change failed", t);
         }
+    }
+
+    private void requireServerFlagEnabled() throws DBWebException {
+        if (WebAppUtils.getWebApplication().getAppConfiguration().isDbUserPasswordChangeEnabled()) {
+            return;
+        }
+        throw new DBWebException("Password change is disabled by the administrator");
+    }
+
+    @NotNull
+    private DBPDataSourceContainer resolveContainer(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull String connectionId
+    ) throws DBWebException {
+        DBPDataSourceContainer container = null;
+        try {
+            container = WebDataSourceUtils.getLocalOrGlobalDataSource(webSession, projectId, connectionId);
+        } catch (DBWebException ignored) {
+        }
+        if (container != null) {
+            return container;
+        }
+        throw new DBWebException("Connection not found");
+    }
+
+    @NotNull
+    private DBAUserPasswordManager resolveUserPasswordManager(
+        @NotNull DBPDataSourceContainer container
+    ) throws DBWebException {
+        DBAUserPasswordManager manager = null;
+        DBPDataSource dataSource = container.getDataSource();
+        if (dataSource instanceof IAdaptable adaptable) {
+            manager = adaptable.getAdapter(DBAUserPasswordManager.class);
+        }
+        if (manager != null) {
+            return manager;
+        }
+        throw new DBWebException("This driver does not support password change from CloudBeaver");
+    }
+
+    @NotNull
+    private String resolveUserName(
+        @NotNull DBPDataSourceContainer container
+    ) throws DBWebException {
+        String userName = DBAuthUtils.getCurrentUserName(container);
+        if (!CommonUtils.isEmpty(userName)) {
+            return userName;
+        }
+        throw new DBWebException("Connection has no user name configured");
+    }
+
+    private void applyPasswordChange(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull String connectionId,
+        @NotNull DBPDataSourceContainer container,
+        @NotNull DBAUserPasswordManager manager,
+        @NotNull String userName,
+        @NotNull String oldPassword,
+        @NotNull String newPassword
+    ) throws DBWebException {
+        log.info("changeConnectionUserPassword: attempting " + formatPasswordChangeLogContext(webSession, projectId, connectionId));
+        try {
+            manager.changeUserPassword(webSession.getProgressMonitor(), userName, newPassword, oldPassword);
+        } catch (DBException e) {
+            log.info("changeConnectionUserPassword: handler error " + formatPasswordChangeLogContext(webSession, projectId, connectionId) + " error=" + e.getClass().getName());
+            DBPErrorAssistant.ErrorType errorType = discoverErrorType(container, e);
+            if (errorType == DBPErrorAssistant.ErrorType.PASSWORD_EXPIRED) {
+                throw new DBWebException(
+                    "Database password has expired",
+                    DBWebException.ERROR_CODE_PASSWORD_EXPIRED,
+                    e
+                );
+            }
+            if (errorType == DBPErrorAssistant.ErrorType.AUTHENTICATION_FAILED) {
+                throw new DBWebException("Current password is incorrect", e);
+            }
+            throw new DBWebException("Password change failed", e);
+        }
+    }
+
+    private void changePasswordUsingTemporaryConnection(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull String connectionId,
+        @NotNull DBPDataSourceContainer container,
+        @NotNull String userName,
+        @NotNull String oldPassword,
+        @NotNull String newPassword
+    ) throws DBWebException {
+        DBPConnectionConfiguration configuration = DBPConnectionConfiguration.copyWithIndependentRuntimeAttributes(
+            container.getConnectionConfiguration());
+        DBAPasswordChangeInfo passwordChangeInfo = new DBAPasswordChangeInfo(userName, oldPassword);
+        passwordChangeInfo.setNewPassword(newPassword);
+        DataSourceDescriptor passwordChangeContainer = (DataSourceDescriptor) container.createCopy(container.getRegistry());
+        passwordChangeContainer.setTemporary(true);
+        passwordChangeContainer.setSavePassword(true);
+        try {
+            webSession.provideAuthParameters(webSession.getProgressMonitor(), container, configuration);
+            configuration.setUserName(userName);
+            configuration.setUserPassword(oldPassword);
+            DBAuthUtils.setPendingPasswordChange(configuration, passwordChangeInfo);
+            passwordChangeContainer.setConnectionInfo(configuration);
+            if (!passwordChangeContainer.connect(webSession.getProgressMonitor(), true, false)) {
+                throw new DBException("Password change connection was canceled");
+            }
+            if (DBAuthUtils.getPendingPasswordChange(configuration) != null) {
+                DBAUserPasswordManager manager = resolveUserPasswordManager(passwordChangeContainer);
+                applyPasswordChange(
+                    webSession,
+                    projectId,
+                    connectionId,
+                    passwordChangeContainer,
+                    manager,
+                    userName,
+                    oldPassword,
+                    newPassword
+                );
+            }
+        } catch (DBWebException e) {
+            throw e;
+        } catch (Exception e) {
+            if (DBAuthUtils.getPendingPasswordChange(configuration) == null) {
+                log.debug("Database password was changed, but the connection retry failed", e);
+                return;
+            }
+            DBPErrorAssistant.ErrorType errorType = discoverErrorType(passwordChangeContainer, e);
+            if (errorType == DBPErrorAssistant.ErrorType.PASSWORD_EXPIRED) {
+                throw new DBWebException(
+                    "Database password has expired",
+                    DBWebException.ERROR_CODE_PASSWORD_EXPIRED,
+                    e
+                );
+            }
+            if (errorType == DBPErrorAssistant.ErrorType.AUTHENTICATION_FAILED) {
+                throw new DBWebException("Current password is incorrect", e);
+            }
+            throw new DBWebException("Cannot verify current password", e);
+        } finally {
+            DBAuthUtils.clearPendingPasswordChange(configuration);
+            if (passwordChangeContainer.isConnected()) {
+                passwordChangeContainer.disconnect(webSession.getProgressMonitor());
+            }
+            passwordChangeContainer.dispose();
+        }
+    }
+
+    private void persistNewPassword(
+        @NotNull WebSession webSession,
+        @NotNull DBPDataSourceContainer container,
+        @Nullable String projectId,
+        @NotNull String connectionId,
+        @NotNull String newPassword
+    ) throws DBWebException {
+        String failureClass = null;
+        boolean persisted;
+        try {
+            container.getConnectionConfiguration().setUserPassword(newPassword);
+            container.getActualConnectionConfiguration().setUserPassword(newPassword);
+            var project = container.getProject();
+            if (project.isUseSecretStorage()) {
+                container.persistSecrets(DBSSecretController.getProjectSecretController(project));
+            }
+            persisted = container.isTemporary() || container.persistConfiguration();
+        } catch (Exception e) {
+            failureClass = e.getClass().getName();
+            persisted = false;
+        }
+        if (persisted) {
+            return;
+        }
+        log.info("changeConnectionUserPassword: persist failed " + formatPasswordChangeLogContext(webSession, projectId, connectionId) + " error=" + failureClass);
+        throw new DBWebException(
+            "Database password was changed but CloudBeaver failed to persist the new credential and "
+                + "the connection will require re-entry of the new password");
+    }
+
+    private void cleanupAfterPasswordChange(
+        @NotNull WebSession webSession,
+        @NotNull DBPDataSourceContainer container,
+        @Nullable String projectId,
+        @NotNull String connectionId
+    ) {
+        WebDataSourceUtils.disconnectDataSource(webSession, container, true);
+        try {
+            WebDataSourceUtils.getWebConnectionInfo(webSession, projectId, connectionId).clearCache();
+        } catch (DBWebException e) {
+            log.debug("Error clearing connection cache after password change", e);
+        }
+    }
+
+    private static String formatPasswordChangeLogContext(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull String connectionId
+    ) {
+        return String.format("sessionId=%s userId=%s projectId=%s connectionId=%s",
+            webSession.getSessionId(), webSession.getUserId(), projectId, connectionId);
+    }
+
+    @NotNull
+    private static DBPErrorAssistant.ErrorType discoverErrorType(
+        @NotNull DBPDataSourceContainer container,
+        @NotNull Throwable error
+    ) {
+        return DBExecUtils.discoverErrorType(container.getDataSource(), error);
     }
 
     @Override
     public WebNetworkEndpointInfo testNetworkHandler(
         @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @Nullable String connectionId,
         @NotNull WebNetworkHandlerConfigInput nhConfig
     ) throws DBWebException {
         DBRProgressMonitor monitor = webSession.getProgressMonitor();
@@ -606,7 +953,13 @@ public class WebServiceCore implements DBWServiceCore {
                 try {
                     monitor.subTask("Initialize tunnel");
 
-                    DBWHandlerConfiguration configuration = new DBWHandlerConfiguration(handlerDescriptor, null);
+                    DBWHandlerConfiguration currentConnectionHandlerConfig =
+                        getCurrentConnectionHandlerConfig(webSession, projectId, connectionId, nhConfig.getId());
+
+                    DBWHandlerConfiguration configuration = currentConnectionHandlerConfig == null
+                        ? new DBWHandlerConfiguration(handlerDescriptor, null)
+                        : new DBWHandlerConfiguration(currentConnectionHandlerConfig);
+
                     WebDataSourceUtils.updateHandlerConfig(configuration, nhConfig);
                     configuration.setSavePassword(true);
                     configuration.setEnabled(true);
@@ -637,6 +990,22 @@ public class WebServiceCore implements DBWServiceCore {
         }
     }
 
+    @Nullable
+    private DBWHandlerConfiguration getCurrentConnectionHandlerConfig(
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @Nullable String connectionId,
+        @NotNull String handlerConfigId
+    ) throws DBWebException {
+        if (projectId == null || connectionId == null) {
+            return null;
+        }
+        WebSessionProjectImpl sessionProject = webSession.getAccessibleProjectById(projectId);
+        WebConnectionInfo connectionInfo = sessionProject.getWebConnectionInfo(connectionId);
+        DBPConnectionConfiguration connectionConfiguration = connectionInfo.getDataSourceContainer().getConnectionConfiguration();
+        return connectionConfiguration.getHandler(handlerConfigId);
+    }
+
     @Override
     public WebConnectionInfo closeConnection(
         @NotNull WebSession webSession,
@@ -647,7 +1016,7 @@ public class WebServiceCore implements DBWServiceCore {
         WebConnectionInfo connectionInfo = project.getWebConnectionInfo(connectionId);
 
         DBPDataSourceContainer dataSourceContainer = connectionInfo.getDataSourceContainer();
-        WebDataSourceUtils.disconnectDataSource(webSession, dataSourceContainer);
+        WebDataSourceUtils.disconnectDataSource(webSession, dataSourceContainer, true);
         return connectionInfo;
     }
 
@@ -764,6 +1133,25 @@ public class WebServiceCore implements DBWServiceCore {
             throw new DBWebException("Error deleting custom navigator settings", e);
         }
         return connectionInfo;
+    }
+
+    @Override
+    @NotNull
+    public Map<String, String> setObjectSettingsForDatasource(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @NotNull String objectId,
+        @NotNull Map<String, String> settings
+    ) throws DBException {
+
+        WebSessionProjectImpl projectById = webSession.getProjectById(projectId);
+        if (projectById == null) {
+            throw new DBWebException("Project '" + projectId + "' not found");
+        }
+        BaseProjectSettings projectSettings = projectById.getProjectSettings();
+        projectSettings.setObjectSettings(SMObjectType.datasource, objectId, settings);
+        Map<String, String> objectSettings = projectSettings.getObjectSettings(SMObjectType.datasource, objectId);
+        return objectSettings == null ? new HashMap<>() : objectSettings;
     }
 
     @Override

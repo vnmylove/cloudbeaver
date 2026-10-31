@@ -1,15 +1,14 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { computed, makeObservable } from 'mobx';
 
-import { ConfirmationDialogDelete, ProcessSnackbar } from '@cloudbeaver/core-blocks';
+import { ProcessSnackbar } from '@cloudbeaver/core-blocks';
 import { injectable } from '@cloudbeaver/core-di';
-import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { Executor, ExecutorInterrupter, type IExecutor } from '@cloudbeaver/core-executor';
 import { type ProjectInfo, projectInfoSortByName, ProjectsService } from '@cloudbeaver/core-projects';
@@ -29,7 +28,7 @@ export interface IConnectionExecutorData {
   state: 'before' | 'after';
 }
 
-@injectable(() => [ConnectionInfoResource, ContainerResource, NotificationService, CommonDialogService, ProjectsService])
+@injectable(() => [ConnectionInfoResource, ContainerResource, NotificationService, ProjectsService])
 export class ConnectionsManagerService {
   get projectConnections(): Connection[] {
     return this.connectionInfoResource.values.filter(connection =>
@@ -47,9 +46,8 @@ export class ConnectionsManagerService {
 
   constructor(
     readonly connectionInfoResource: ConnectionInfoResource,
-    readonly containerContainers: ContainerResource,
+    readonly containerResource: ContainerResource,
     private readonly notificationService: NotificationService,
-    private readonly commonDialogService: CommonDialogService,
     private readonly projectsService: ProjectsService,
   ) {
     this.disconnecting = false;
@@ -84,7 +82,7 @@ export class ConnectionsManagerService {
 
   getObjectContainerById(connectionKey: IConnectionInfoParams, objectCatalogId?: string, objectSchemaId?: string): ObjectContainer | undefined {
     if (objectCatalogId) {
-      const objectContainers = this.containerContainers.getCatalogData(connectionKey, objectCatalogId);
+      const objectContainers = this.containerResource.getCatalogData(connectionKey, objectCatalogId);
 
       if (!objectContainers) {
         return;
@@ -98,26 +96,17 @@ export class ConnectionsManagerService {
     }
 
     if (objectSchemaId) {
-      return this.containerContainers.getSchema(connectionKey, objectSchemaId);
+      return this.containerResource.getSchema(connectionKey, objectSchemaId);
     }
 
     return undefined;
   }
 
-  async deleteConnection(key: IConnectionInfoParams): Promise<void> {
+  async deleteConnection(key: IConnectionInfoParams): Promise<boolean> {
     const connection = await this.connectionInfoResource.load(key);
 
     if (!connection.canDelete) {
-      return;
-    }
-
-    const { status } = await this.commonDialogService.open(ConfirmationDialogDelete, {
-      title: 'ui_data_delete_confirmation',
-      message: `You're going to delete "${connection.name}" connection. Are you sure?`,
-      confirmActionText: 'ui_delete',
-    });
-    if (status === DialogueStateResult.Rejected) {
-      return;
+      return false;
     }
 
     const contexts = await this.onDelete.execute({
@@ -126,7 +115,7 @@ export class ConnectionsManagerService {
     });
 
     if (ExecutorInterrupter.isInterrupted(contexts)) {
-      return;
+      return false;
     }
 
     await this.connectionInfoResource.deleteConnection(key);
@@ -135,6 +124,7 @@ export class ConnectionsManagerService {
       connections: [key],
       state: 'after',
     });
+    return true;
   }
 
   hasAnyConnection(connected?: boolean): boolean {
@@ -215,7 +205,7 @@ export class ConnectionsManagerService {
   }
 
   async loadObjectContainer(key: IConnectionInfoParams, catalogId?: string): Promise<IStructContainers> {
-    await this.containerContainers.load({ projectId: key.projectId, connectionId: key.connectionId, catalogId });
-    return this.containerContainers.get({ projectId: key.projectId, connectionId: key.connectionId, catalogId })!;
+    await this.containerResource.load({ projectId: key.projectId, connectionId: key.connectionId, catalogId });
+    return this.containerResource.get({ projectId: key.projectId, connectionId: key.connectionId, catalogId })!;
   }
 }

@@ -16,9 +16,9 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.EcSignatureConverter;
-import io.cloudbeaver.service.teleport.auth.JwkEntry;
-import io.cloudbeaver.service.teleport.auth.TeleportConstants;
+import io.cloudbeaver.service.auth.teleport.EcSignatureConverter;
+import io.cloudbeaver.service.auth.teleport.JwkEntry;
+import io.cloudbeaver.service.auth.teleport.TeleportConstants;
 
 import com.google.gson.Gson;
 

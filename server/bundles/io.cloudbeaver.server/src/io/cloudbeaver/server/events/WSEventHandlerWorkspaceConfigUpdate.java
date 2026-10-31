@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@
  */
 package io.cloudbeaver.server.events;
 
+import io.cloudbeaver.WebSessionProjectImpl;
+import io.cloudbeaver.model.session.BaseWebSession;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.WorkspaceConfigEventManager;
 import org.jkiss.dbeaver.model.websocket.event.WSWorkspaceConfigurationChangedEvent;
-import org.jkiss.dbeaver.registry.driver.DriverDescriptorSerializerLegacy;
+import org.jkiss.dbeaver.registry.RegistryConstants;
 
 public class WSEventHandlerWorkspaceConfigUpdate extends WSDefaultEventHandler<WSWorkspaceConfigurationChangedEvent> {
     private static final Log log = Log.getLog(WSEventHandlerWorkspaceConfigUpdate.class);
@@ -30,8 +32,31 @@ public class WSEventHandlerWorkspaceConfigUpdate extends WSDefaultEventHandler<W
         String configFileName = event.getConfigFilePath();
         log.info("Config file changed: " + configFileName);
         WorkspaceConfigEventManager.fireConfigChangedEvent(configFileName);
-        if (DriverDescriptorSerializerLegacy.DRIVERS_FILE_NAME.equals(event.getConfigFilePath())) {
-            super.handleEvent(event);
+        super.handleEvent(event);
+    }
+
+    @Override
+    protected void updateSessionData(
+        @NotNull BaseWebSession activeUserSession,
+        @NotNull WSWorkspaceConfigurationChangedEvent event
+    ) {
+        if (isConnectionTypesConfig(event)) {
+            for (WebSessionProjectImpl project : activeUserSession.getWorkspace().getProjects()) {
+                project.getDataSourceRegistry().refreshConfig();
+            }
         }
+        super.updateSessionData(activeUserSession, event);
+    }
+
+    @Override
+    protected boolean isAcceptableInSession(
+        @NotNull BaseWebSession activeUserSession,
+        @NotNull WSWorkspaceConfigurationChangedEvent event
+    ) {
+        return isConnectionTypesConfig(event) || super.isAcceptableInSession(activeUserSession, event);
+    }
+
+    private static boolean isConnectionTypesConfig(@NotNull WSWorkspaceConfigurationChangedEvent event) {
+        return RegistryConstants.CONNECTION_TYPES_FILE_NAME.equals(event.getConfigFilePath());
     }
 }

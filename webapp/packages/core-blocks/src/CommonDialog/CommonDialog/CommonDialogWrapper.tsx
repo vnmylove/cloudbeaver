@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -55,13 +55,22 @@ export const CommonDialogWrapper = observer<CommonDialogWrapperProps, HTMLDivEle
       }
     }
 
+    // We need to specify persistent notifications for the dialog to make them accessible when the dialog is open.
+    function getDefaultPersistentElements(): Element[] {
+      const dialogs = document.querySelectorAll('[data-dialog]');
+      const persistentNotifications = document.querySelectorAll('[data-dialog-persistent-notification]');
+
+      return [...dialogs, ...persistentNotifications];
+    }
+
     return (
       <Dialog
         ref={ref}
         aria-label={ariaLabel}
         open={context.visible}
         data-size={size}
-        className={s(computedStyles, { dialog: true, fixedSize, fixedWidth, freeHeight }, className)}
+        getPersistentElements={getDefaultPersistentElements}
+        className={s(computedStyles, { dialog: true, fixedSize, fixedWidth, freeHeight }, 'tw:shadow-xlarge', className)}
         autoFocusOnShow={autoFocusOnShow}
         autoFocusOnHide={autoFocusOnHide}
         initialFocus={initialFocus as HTMLElement | React.RefObject<HTMLElement> | null | undefined}

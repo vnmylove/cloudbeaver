@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
+import org.jkiss.dbeaver.model.navigator.DBNNode;
 import org.jkiss.dbeaver.model.qm.QMConstants;
 import org.jkiss.utils.CommonUtils;
 
@@ -44,7 +45,7 @@ public class GraphQLLoggerUtil {
     public static String getUserId(@NotNull HttpServletRequest request) {
         WebSession session = getWebSession(request);
         if (session == null) {
-            return null;
+            return QMConstants.QM_UNAUTHORIZED_USER;
         }
         String userId = session.getUserContext().getUserId();
         if (userId == null) {
@@ -121,6 +122,9 @@ public class GraphQLLoggerUtil {
             }
             if (value instanceof String sv && CommonUtils.isEmpty(sv)) {
                 continue;
+            }
+            if (value instanceof DBNNode node) {
+                value = node.getNodeUri();
             }
 
             if (value != null && !isSimple(value.getClass())) {

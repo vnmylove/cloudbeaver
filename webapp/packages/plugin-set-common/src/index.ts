@@ -40,13 +40,16 @@ import coreSupport from '@cloudbeaver/core-support/module';
 import coreView from '@cloudbeaver/core-view/module';
 import coreServerNotifications from '@cloudbeaver/core-server-notifications/module';
 import coreSessionActions from '@cloudbeaver/core-session-actions/module';
+import pluginNetworkHandlers from '@cloudbeaver/plugin-network-handlers/module';
 
+import pluginConnectionNetworkHandlers from '@cloudbeaver/plugin-connection-network-handlers/module';
 import pluginAdministration from '@cloudbeaver/plugin-administration/module';
 import pluginAppLogo from '@cloudbeaver/plugin-app-logo/module';
 import pluginAppLogoAdministration from '@cloudbeaver/plugin-app-logo-administration/module';
 import pluginAuthentication from '@cloudbeaver/plugin-authentication/module';
 import pluginAuthenticationAdministration from '@cloudbeaver/plugin-authentication-administration/module';
 import pluginBrowser from '@cloudbeaver/plugin-browser/module';
+import pluginConnectionAdministration from '@cloudbeaver/plugin-connection-administration/module';
 import pluginConnectionCustom from '@cloudbeaver/plugin-connection-custom/module';
 import pluginConnectionSearch from '@cloudbeaver/plugin-connection-search/module';
 import pluginConnections from '@cloudbeaver/plugin-connections/module';
@@ -88,6 +91,7 @@ import pluginSettingsMenu from '@cloudbeaver/plugin-settings-menu/module';
 import pluginSettingsMenuAdministration from '@cloudbeaver/plugin-settings-menu-administration/module';
 import pluginSettingsPanel from '@cloudbeaver/plugin-settings-panel/module';
 import pluginSqlEditor from '@cloudbeaver/plugin-sql-editor/module';
+import pluginSqlEditorExecutionPlan from '@cloudbeaver/plugin-sql-editor-execution-plan/module';
 import pluginSqlEditorNavigationTab from '@cloudbeaver/plugin-sql-editor-navigation-tab/module';
 import pluginSqlEditorNavigationTabScript from '@cloudbeaver/plugin-sql-editor-navigation-tab-script/module';
 import pluginSqlEditorNew from '@cloudbeaver/plugin-sql-editor-new/module';
@@ -111,6 +115,17 @@ import pluginSqlAsyncTaskConfirmation from '@cloudbeaver/plugin-sql-async-task-c
 import pluginDataViewerConditionalFormatting from '@cloudbeaver/plugin-data-viewer-conditional-formatting/module';
 import pluginConnectionView from '@cloudbeaver/plugin-connection-view/module';
 import pluginConnectionPreferences from '@cloudbeaver/plugin-connection-preferences/module';
+import pluginScriptExport from '@cloudbeaver/plugin-script-export/module';
+import pluginProjectInfo from '@cloudbeaver/plugin-project-info/module';
+import pluginDataViewerReferences from '@cloudbeaver/plugin-data-viewer-references/module';
+import pluginAi from '@cloudbeaver/plugin-ai/module';
+import pluginAiProfiles from '@cloudbeaver/plugin-ai-profiles/module';
+import pluginAiChat from '@cloudbeaver/plugin-ai-chat/module';
+import pluginAiChatProfiles from '@cloudbeaver/plugin-ai-chat-profiles/module';
+import pluginAiAdministration from '@cloudbeaver/plugin-ai-administration/module';
+import pluginAiProfilesAdministration from '@cloudbeaver/plugin-ai-profiles-administration/module';
+import pluginAiUserProfile from '@cloudbeaver/plugin-ai-user-profile/module';
+import pluginConnectionAi from '@cloudbeaver/plugin-connection-ai/module';
 
 const core = [
   coreRouting, // important, should be first because the router starts in load phase first after all plugins register phase
@@ -160,6 +175,7 @@ export const commonSet = [
   pluginAuthenticationAdministration,
   pluginTheme,
   pluginLocalization,
+  pluginConnectionAdministration,
   pluginConnectionCustom,
   pluginConnectionSearch,
   pluginDataExport,
@@ -171,7 +187,9 @@ export const commonSet = [
   pluginGisViewer,
   pluginDdlViewer,
   pluginObjectViewer,
+  pluginScriptExport,
   pluginSqlEditor,
+  pluginSqlEditorExecutionPlan,
   pluginSqlEditorNavigationTab,
   pluginSqlEditorScreen,
   pluginSqlEditorNew,
@@ -221,4 +239,16 @@ export const commonSet = [
   pluginDataViewerConditionalFormatting,
   pluginConnectionView,
   pluginConnectionPreferences,
+  pluginProjectInfo,
+  pluginNetworkHandlers,
+  pluginConnectionNetworkHandlers,
+  pluginDataViewerReferences,
+  pluginAi,
+  pluginAiProfiles,
+  pluginAiChat,
+  pluginAiChatProfiles,
+  pluginAiAdministration,
+  pluginAiProfilesAdministration,
+  pluginAiUserProfile,
+  pluginConnectionAi,
 ];

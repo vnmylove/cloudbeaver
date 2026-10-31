@@ -26,12 +26,13 @@ import { ResultSetEditAction } from './DatabaseDataModel/Actions/ResultSet/Resul
 import type { IDatabaseDataOptions } from './DatabaseDataModel/IDatabaseDataOptions.js';
 import type { IDatabaseResultSet } from './DatabaseDataModel/IDatabaseResultSet.js';
 import { ResultSetDataSource } from './ResultSet/ResultSetDataSource.js';
+import { DatabaseDataFeature } from './DatabaseDataModel/IDatabaseDataSource.js';
 
 export interface IDataContainerOptions extends IDatabaseDataOptions {
   containerNodePath: string;
 }
 
-export class ContainerDataSource extends ResultSetDataSource<IDataContainerOptions> {
+export class ContainerDataSource<TOptions extends IDataContainerOptions = IDataContainerOptions> extends ResultSetDataSource<TOptions> {
   currentTask: ITask<SqlExecuteInfo> | null;
 
   override get canCancel(): boolean {
@@ -52,6 +53,7 @@ export class ContainerDataSource extends ResultSetDataSource<IDataContainerOptio
 
     this.currentTask = null;
     this.executionContext = null;
+    this.setFeature(DatabaseDataFeature.DataEditor);
 
     makeObservable(this, {
       currentTask: observable.ref,
@@ -214,6 +216,8 @@ export class ContainerDataSource extends ResultSetDataSource<IDataContainerOptio
         limit,
         constraints: options.constraints,
         where: options.whereFilter || undefined,
+        anyConstraint: options.anyConstraint,
+        shouldUseDisjunctive: options.shouldUseDisjunctive,
       },
       dataFormat: this.dataFormat,
     };

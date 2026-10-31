@@ -116,6 +116,27 @@
       "path": "../plugin-administration"
     },
     {
+      "path": "../plugin-ai"
+    },
+    {
+      "path": "../plugin-ai-administration"
+    },
+    {
+      "path": "../plugin-ai-chat"
+    },
+    {
+      "path": "../plugin-ai-chat-profiles"
+    },
+    {
+      "path": "../plugin-ai-profiles"
+    },
+    {
+      "path": "../plugin-ai-profiles-administration"
+    },
+    {
+      "path": "../plugin-ai-user-profile"
+    },
+    {
       "path": "../plugin-app-logo"
     },
     {
@@ -137,7 +158,16 @@
       "path": "../plugin-codemirror6"
     },
     {
+      "path": "../plugin-connection-administration"
+    },
+    {
+      "path": "../plugin-connection-ai"
+    },
+    {
       "path": "../plugin-connection-custom"
+    },
+    {
+      "path": "../plugin-connection-network-handlers"
     },
     {
       "path": "../plugin-connection-preferences"
@@ -171,6 +201,9 @@
     },
     {
       "path": "../plugin-data-viewer-conditional-formatting"
+    },
+    {
+      "path": "../plugin-data-viewer-references"
     },
     {
       "path": "../plugin-data-viewer-request-query-viewer"
@@ -224,6 +257,9 @@
       "path": "../plugin-navigation-tree-rm"
     },
     {
+      "path": "../plugin-network-handlers"
+    },
+    {
       "path": "../plugin-object-viewer"
     },
     {
@@ -234,6 +270,9 @@
     },
     {
       "path": "../plugin-product-information-administration"
+    },
+    {
+      "path": "../plugin-project-info"
     },
     {
       "path": "../plugin-projects"
@@ -249,6 +288,9 @@
     },
     {
       "path": "../plugin-root"
+    },
+    {
+      "path": "../plugin-script-export"
     },
     {
       "path": "../plugin-session-expiration"
@@ -273,6 +315,9 @@
     },
     {
       "path": "../plugin-sql-editor"
+    },
+    {
+      "path": "../plugin-sql-editor-execution-plan"
     },
     {
       "path": "../plugin-sql-editor-navigation-tab"
@@ -327,8 +372,7 @@
     "__custom_mocks__/**/*",
     "src/**/*",
     "src/**/*.json",
-    "src/**/*.css",
-    "src/**/*.scss"
+    "src/**/*.css"
   ],
   "exclude": [
     "**/node_modules",

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import io.cloudbeaver.model.cli.CloudbeaverCliConstants;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.model.session.WebSessionProvider;
 import io.cloudbeaver.server.WebAppUtils;
+import io.cloudbeaver.server.WebApplication;
 import io.cloudbeaver.server.graphql.GraphQLEndpoint;
 import io.cloudbeaver.server.graphql.GraphQLLoggerUtil;
 import io.cloudbeaver.service.security.SMUtils;
@@ -77,9 +78,15 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
     /**
      * Creates proxy for permission checks and other general API calls validation/logging.
      */
+    @NotNull
     protected API_TYPE getService(DataFetchingEnvironment env) {
         Object proxyImpl = Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{apiInterface}, new ServiceInvocationHandler(serviceImpl, env));
         return apiInterface.cast(proxyImpl);
+    }
+
+    @NotNull
+    protected WebApplication getApplication() {
+        return WebAppUtils.getWebPlatform().getApplication();
     }
 
     @Nullable
@@ -99,24 +106,23 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
         }
     }
 
-    protected static HttpServletResponse getServletResponse(DataFetchingEnvironment env) {
+    @NotNull
+    protected static HttpServletResponse getServletResponse(@NotNull DataFetchingEnvironment env) {
         return GraphQLEndpoint.getServletResponse(env);
     }
 
-    protected static DBWBindingContext getBindingContext(DataFetchingEnvironment env) {
+    @NotNull
+    protected static DBWBindingContext getBindingContext(@NotNull DataFetchingEnvironment env) {
         return GraphQLEndpoint.getBindingContext(env);
     }
 
-    protected static WebSession getWebSession(DataFetchingEnvironment env) throws DBWebException {
-        if (env.getGraphQlContext().getBoolean(CloudbeaverCliConstants.CLI_MODE)) {
-            return getSessionFromContextOrThrow(env);
-        }
-        return WebAppUtils.getWebApplication().getSessionManager().getWebSession(
-            GraphQLEndpoint.getServletRequestOrThrow(env), getServletResponse(env));
+    @NotNull
+    protected static WebSession getWebSession(@NotNull DataFetchingEnvironment env) throws DBWebException {
+        return getWebSession(env, true);
     }
 
     @Nullable
-    protected static WebSession getSessionFromContext(DataFetchingEnvironment env) {
+    protected static WebSession getSessionFromContext(@NotNull DataFetchingEnvironment env) {
         return env.getGraphQlContext().get(WebSession.class.getName());
     }
 
@@ -129,6 +135,7 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
         return webSession;
     }
 
+    @NotNull
     protected static WebSession getWebSession(@NotNull DataFetchingEnvironment env, boolean errorOnNotFound) throws DBWebException {
         if (env.getGraphQlContext().getBoolean(CloudbeaverCliConstants.CLI_MODE)) {
             return getSessionFromContextOrThrow(env);
@@ -137,6 +144,7 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
             GraphQLEndpoint.getServletRequestOrThrow(env), getServletResponse(env), errorOnNotFound);
     }
 
+    @Nullable
     protected static String getProjectReference(@NotNull DataFetchingEnvironment env) {
         return env.getArgument("projectId");
     }
@@ -158,6 +166,7 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
             GraphQLEndpoint.getServletRequestOrThrow(env));
     }
 
+    @NotNull
     public static WebSession findWebSession(@NotNull DataFetchingEnvironment env, boolean errorOnNotFound) throws DBWebException {
         return WebAppUtils.getWebApplication().getSessionManager().findWebSession(
             GraphQLEndpoint.getServletRequestOrThrow(env), errorOnNotFound);
@@ -191,15 +200,21 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
             this.env = env;
         }
 
+        @Nullable
         @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        public Object invoke(@NotNull Object proxy, @NotNull Method method, @Nullable Object[] args) throws Throwable {
             try {
                 try {
+                    if (method.getDeclaringClass() == Object.class) {
+                        return method.invoke(impl, args);
+                    }
+                    WebAction webAction = method.getAnnotation(WebAction.class);
+                    WebApplication application = getApplication();
+                    checkConfigurationModeAccess(webAction, application);
                     WebActionSet actionSet = method.getDeclaringClass().getAnnotation(WebActionSet.class);
                     if (actionSet != null) {
                         checkServicePermissions(actionSet);
                     }
-                    WebAction webAction = method.getAnnotation(WebAction.class);
                     if (webAction != null) {
                         checkActionPermissions(method, webAction);
                     }
@@ -272,6 +287,12 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
                 if (project == null) {
                     throw new DBException("Project not found:" + projectId);
                 }
+                var customConnectionsEnabled =
+                    ServletAppUtils.getServletApplication().getAppConfiguration().isSupportsCustomConnections();
+                if (!customConnectionsEnabled && project.isPrivateProject()) {
+                    throw new DBWebExceptionAccessDenied("Access to private project is denied");
+                }
+
                 RMProject rmProject = project.getRMProject();
 
                 for (String reqProjectPermission : requireProjectPermissions) {
@@ -279,6 +300,16 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
                         throw new DBWebExceptionAccessDenied("Access denied");
                     }
                 }
+            }
+        }
+
+        private void checkConfigurationModeAccess(
+            @Nullable WebAction webAction,
+            @NotNull WebApplication application
+        ) throws DBWebExceptionAccessDenied {
+            if (application.isConfigurationMode() &&
+                (webAction == null || !webAction.configurationModeAllowed())) {
+                throw new DBWebExceptionAccessDenied("Action is not available in server configuration mode");
             }
         }
 
@@ -294,7 +325,7 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
         }
 
         private void checkActionPermissions(@NotNull Method method, @NotNull WebAction webAction) throws DBWebException {
-            var application = WebAppUtils.getWebPlatform().getApplication();
+            var application = getApplication();
             if (application.isInitializationMode() && webAction.initializationRequired()) {
                 String message = "Server initialization in progress: "
                     + String.join(",", application.getInitActions().values()) + ".\nDo not restart the server.";
@@ -353,9 +384,13 @@ public abstract class WebServiceBindingBase<API_TYPE extends DBWService> impleme
             }
             String sessionId = GraphQLLoggerUtil.getSmSessionId(request);
             String userId = GraphQLLoggerUtil.getUserId(request);
-            String loggerMessage = GraphQLLoggerUtil.buildLoggerMessage(sessionId, userId, method, args);
+            try {
+                String loggerMessage = GraphQLLoggerUtil.buildLoggerMessage(sessionId, userId, method, args);
 
-            log.debug("API > " + method.getName() + loggerMessage);
+                log.debug("API > " + method.getName() + loggerMessage);
+            } catch (Throwable e) {
+                log.error("Logging error", e);
+            }
 
             setLogContext(method, args);
         }

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ export class ConnectionFormAccessTabBootstrap extends Bootstrap {
   private readonly key: string;
 
   constructor(
-    private readonly ConnectionFormService: ConnectionFormService,
+    private readonly connectionFormService: ConnectionFormService,
     private readonly administrationScreenService: AdministrationScreenService,
     private readonly sessionPermissionsResource: SessionPermissionsResource,
-    private readonly permissionsResource: PermissionsService,
+    private readonly permissionsService: PermissionsService,
     private readonly projectInfoResource: ProjectInfoResource,
   ) {
     super();
@@ -33,11 +33,12 @@ export class ConnectionFormAccessTabBootstrap extends Bootstrap {
   }
 
   override register(): void {
-    this.ConnectionFormService.parts.add({
+    this.connectionFormService.parts.add({
       key: this.key,
       name: 'connections_connection_edit_access',
       title: 'connections_connection_edit_access',
-      order: 4,
+      icon: '/icons/plugin_connection_shield_user.svg',
+      order: 6,
       stateGetter: context => () => getConnectionFormAccessPart(context.formState),
       getLoader: (_, context) => [
         getCachedMapResourceLoaderState(this.projectInfoResource, () => context?.formState.state.projectId ?? null),
@@ -54,6 +55,6 @@ export class ConnectionFormAccessTabBootstrap extends Bootstrap {
   }
 
   private isAccessTabActive(projectId: string | null): boolean {
-    return projectId !== null && isGlobalProject(this.projectInfoResource.get(projectId)) && this.permissionsResource.has(EAdminPermission.admin);
+    return projectId !== null && isGlobalProject(this.projectInfoResource.get(projectId)) && this.permissionsService.has(EAdminPermission.admin);
   }
 }

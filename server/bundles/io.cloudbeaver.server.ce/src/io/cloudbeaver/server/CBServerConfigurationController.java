@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,7 @@ import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import io.cloudbeaver.model.app.BaseServerConfigurationController;
 import io.cloudbeaver.model.app.BaseServletApplication;
-import io.cloudbeaver.model.config.CBAppConfig;
-import io.cloudbeaver.model.config.CBServerConfig;
-import io.cloudbeaver.model.config.PasswordPolicyConfiguration;
-import io.cloudbeaver.model.config.SMControllerConfiguration;
+import io.cloudbeaver.model.config.*;
 import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -55,6 +52,9 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
     extends BaseServerConfigurationController<T> {
 
     private static final Log log = Log.getLog(CBServerConfigurationController.class);
+
+    private static final String NETWORK_MODE_ENV = "NETWORK_MODE";
+    private static final String NETWORK_MODE_VALUE_HOST = "host";
 
     // Configurations
     @NotNull
@@ -167,6 +167,11 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
 
     public T parseServerConfiguration() {
         var config = getServerConfiguration();
+        if (NETWORK_MODE_VALUE_HOST.equalsIgnoreCase(System.getenv(NETWORK_MODE_ENV))) {
+            String hostName = getLocalHostAddress();
+            config.setServerHost(hostName);
+        }
+
         config.setContentRoot(ServletAppUtils.getRelativePath(config.getContentRoot(), homeDirectory));
         config.setRootURI(readRootUri(config.getRootURI()));
         config.setDriversLocation(ServletAppUtils.getRelativePath(config.getDriversLocation(), homeDirectory));
@@ -366,6 +371,7 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
         try (Writer out = new OutputStreamWriter(Files.newOutputStream(runtimeConfigPath), StandardCharsets.UTF_8)) {
             Gson gson = new GsonBuilder()
                 .setStrictness(Strictness.LENIENT)
+                .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
                 .setPrettyPrinting()
                 .create();
             gson.toJson(configurationProperties, out);
@@ -407,6 +413,11 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
                 appConfigProperties,
                 "adminCredentialsSaveEnabled",
                 appConfig.isAdminCredentialsSaveEnabled());
+            copyConfigValue(
+                oldAppConfig,
+                appConfigProperties,
+                "dbUserPasswordChangeEnabled",
+                appConfig.isDbUserPasswordChangeEnabled());
             copyConfigValue(
                 oldAppConfig, appConfigProperties, "enableReverseProxyAuth", appConfig.isEnabledReverseProxyAuth());
             copyConfigValue(
@@ -481,6 +492,7 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
                 }
             }
             appConfigProperties.put("enabledFeatures", Arrays.asList(appConfig.getEnabledFeatures()));
+            appConfigProperties.put("disabledFeatures", Arrays.asList(appConfig.getDisabledFeatures()));
             if (appConfig.getEnabledAuthProviders() != null) {
                 appConfigProperties.put("enabledAuthProviders", Arrays.asList(appConfig.getEnabledAuthProviders()));
             }
@@ -500,7 +512,7 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
     @NotNull
     protected Map<String, Object> collectServerConfigProperties(
         @NotNull CBServerConfig serverConfig,
-        Map<String, Object> originServerConfig
+        @NotNull Map<String, Object> originServerConfig
     ) {
         var serverConfigProperties = new LinkedHashMap<String, Object>();
         if (!CommonUtils.isEmpty(serverConfig.getServerName())) {
@@ -624,6 +636,9 @@ public abstract class CBServerConfigurationController<T extends CBServerConfig>
     public T getServerConfiguration() {
         return serverConfiguration;
     }
+
+    @NotNull
+    public abstract CBServerConfigurationMapper<T, ? extends AdminServerConfig> createServerConfigurationInputMapper();
 
     public CBAppConfig getAppConfiguration() {
         return appConfiguration;

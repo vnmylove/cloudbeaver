@@ -1,4 +1,10 @@
 export default [
+  ['plugin_authentication_administration_team_grant_manual', '管理员'],
+  ['plugin_authentication_administration_team_grant_provider', '身份验证提供商'],
+  ['plugin_authentication_administration_team_grant_default', '默认团队'],
+  ['plugin_authentication_administration_team_grant_manual_tooltip', '由管理员手动添加。'],
+  ['plugin_authentication_administration_team_grant_default_tooltip', '此团队在设置中被配置为用户的默认团队，因此用户被自动添加。'],
+  ['plugin_authentication_administration_team_grant_provider_tooltip', '由身份验证提供商分配，并在登录时同步。'],
   ['authentication_administration_pages_label', '页面'],
   ['authentication_administration_user_connections_user_add', '创建用户'],
   ['authentication_administration_user_connections_user_new', '新用户'],
@@ -34,6 +40,7 @@ export default [
   ['authentication_administration_users_filters_status_enabled', '启用'],
   ['authentication_administration_users_filters_status_disabled', '禁用'],
   ['authentication_administration_users_filters_status_all', '全部'],
+  ['authentication_administration_users_filters_filter_label', 'Filter'],
   ['authentication_administration_users_empty', '无用户'],
   ['authentication_administration_users_delete_user', '删除用户'],
   ['authentication_administration_users_delete_user_fail', '删除用户失败'],
@@ -106,6 +113,7 @@ export default [
   ['administration_teams_team_granted_users_user_name', '用户名称'],
   ['administration_teams_team_granted_users_empty', '没有可用用户'],
   ['administration_teams_team_granted_users_permission_denied', '您不能编辑自己的权限'],
+  ['administration_teams_team_granted_users_only_admin_team', '您无法管理自己的权限，因为这是您所属的唯一管理员团队'],
 
   ['administration_teams_team_granted_connections_tab_title', '连接'],
   ['administration_teams_team_granted_connections_search_placeholder', '搜索连接名称...'],
@@ -118,6 +126,7 @@ export default [
 
   ['plugin_authentication_administration_team_form_edit_label', 'Team editing form'],
   ['plugin_authentication_administration_user_form_edit_label', 'User editing form'],
+  ['plugin_authentication_administration_user_last_login', '最后登录'],
 
   [
     'plugin_authentication_administration_user_username_validation_error',

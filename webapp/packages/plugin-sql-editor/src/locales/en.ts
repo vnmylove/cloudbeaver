@@ -1,4 +1,12 @@
 export default [
+  ['sql_editor_settings_blank_line_delimiter_name', 'Blank line is statement delimiter'],
+  [
+    'sql_editor_settings_blank_line_delimiter_desc',
+    'Controls whether blank lines separate SQL statements. Select Never to allow blank lines within a statement.',
+  ],
+  ['sql_editor_settings_blank_line_delimiter_always', 'Always'],
+  ['sql_editor_settings_blank_line_delimiter_never', 'Never'],
+  ['sql_editor_settings_blank_line_delimiter_smart', 'Smart'],
   ['plugin_sql_editor_sql_editor_settings_group', 'SQL Editor'],
   ['sql_editor_settings_content_assistant_experimental_mode_name', 'Completion engine'],
   ['sql_editor_settings_content_assistant_experimental_mode_desc', 'SQL editor content assistant mode'],
@@ -14,7 +22,6 @@ export default [
   ['sql_editor_placeholder', 'Execute query with Ctrl+Enter to see results'],
   ['sql_editor_hint_empty', 'There is no proposals...'],
   ['sql_editor_tools_more_menu_tooltip', 'More tools'],
-  ['sql_editor_execution_plan_button_tooltip', 'Explain execution plan'],
   ['sql_editor_output_logs_button_tooltip', 'Show server output'],
   ['sql_editor_output_logs_tab_title', 'Output'],
   ['sql_editor_output_logs_input_placeholder', 'Enter a part of a message to search for here'],
@@ -27,12 +34,6 @@ export default [
   ['sql_editor_sql_statistics_unavailable', 'Statistics is not available'],
   ['sql_editor_sql_execution_executed_queries', 'Executed queries:'],
   ['sql_editor_sql_execution_executing', 'Executing...'],
-  ['sql_execution_plan_placeholder', 'Execution plan is empty'],
-  ['sql_execution_plan_properties_panel_placeholder', 'There are no items to show'],
-  ['sql_execution_plan_properties_panel_name', 'Name'],
-  ['sql_execution_plan_properties_panel_value', 'Value'],
-  ['sql_execution_plan_properties_panel_general', 'General'],
-  ['sql_execution_plan_properties_panel_details', 'Details'],
   ['sql_editor_upload_script_tooltip', 'Upload sql script'],
   ['sql_editor_download_script_tooltip', 'Download sql script'],
   [
@@ -56,4 +57,7 @@ export default [
   ],
   ['plugin_sql_editor_settings_highlight_white_space', 'Highlight white space characters'],
   ['plugin_sql_editor_settings_highlight_white_space_description', 'Highlight spaces, tabs and other white space characters in the SQL editor'],
+  ['plugin_sql_editor_bind_parameters_dialog_alert_title', 'String values must be quoted'],
+  ['plugin_sql_editor_export_local_tab', 'to OS (local)'],
+  ['plugin_sql_editor_script_exported', 'Script exported successfully'],
 ];

@@ -1,17 +1,15 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { observable } from 'mobx';
 import { observer } from 'mobx-react-lite';
 
 import { UserInfoResource } from '@cloudbeaver/core-authentication';
 import {
   ColoredContainer,
-  ConfirmationDialog,
   Container,
   Form,
   Group,
@@ -19,48 +17,24 @@ import {
   InputField,
   ToolsAction,
   ToolsPanel,
-  useCustomInputValidation,
-  useExecutor,
   useForm,
-  useObservableRef,
+  useFormCustomInputValidation,
   usePasswordValidation,
   useTranslate,
 } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
-import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { ExecutorInterrupter } from '@cloudbeaver/core-executor';
 import { isValuesEqual } from '@cloudbeaver/core-utils';
 
-import { userProfileContext } from '../../userProfileContext.js';
-import { UserProfileOptionsPanelService } from '../../UserProfileOptionsPanelService.js';
+import { UserProfileFormAuthenticationService } from './UserProfileFormAuthenticationService.js';
 
 export const ChangePassword = observer(function ChangePassword() {
   const translate = useTranslate();
-  const state = useObservableRef(
-    {
-      oldPassword: '',
-      password: '',
-      repeatedPassword: '',
-    },
-    {
-      oldPassword: observable.ref,
-      password: observable.ref,
-      repeatedPassword: observable.ref,
-    },
-  );
   const notificationService = useService(NotificationService);
-  const userProfileOptionsPanelService = useService(UserProfileOptionsPanelService);
+  const userProfileFormAuthenticationService = useService(UserProfileFormAuthenticationService);
   const userInfoResource = useService(UserInfoResource);
-  const commonDialogService = useService(CommonDialogService);
+  const state = userProfileFormAuthenticationService.state;
   const disabled = userInfoResource.isLoading();
-  const passwordValidationRef = usePasswordValidation();
-  const passwordRepeatRef = useCustomInputValidation<string>(value => {
-    if (!isValuesEqual(value, state.password, null)) {
-      return translate('authentication_user_passwords_not_match');
-    }
-    return null;
-  });
 
   const form = useForm({
     async onSubmit() {
@@ -75,34 +49,18 @@ export const ChangePassword = observer(function ChangePassword() {
       }
     },
   });
+  const passwordValidationRef = usePasswordValidation(form);
+  const passwordRepeatValidation = useFormCustomInputValidation<string>(value => {
+    if (!isValuesEqual(value, state.password, null)) {
+      return translate('authentication_user_passwords_not_match');
+    }
+    return null;
+  }, form);
 
   function resetForm() {
-    state.oldPassword = '';
-    state.password = '';
-    state.repeatedPassword = '';
+    userProfileFormAuthenticationService.reset();
     form.ref?.reset();
   }
-
-  useExecutor({
-    executor: userProfileOptionsPanelService.onClose,
-    handlers: [
-      async function closeHandler(_, contexts) {
-        const context = contexts.getContext(userProfileContext);
-
-        if ((state.oldPassword || state.password || state.repeatedPassword) && !context.force) {
-          const { status } = await commonDialogService.open(ConfirmationDialog, {
-            title: 'plugin_user_profile_authentication_change_password_cancel_title',
-            message: 'plugin_user_profile_authentication_change_password_cancel_message',
-            confirmActionText: 'ui_processing_ok',
-          });
-
-          if (status === DialogueStateResult.Rejected) {
-            ExecutorInterrupter.interrupt(contexts);
-          }
-        }
-      },
-    ],
-  });
 
   return (
     <ColoredContainer wrap overflow gap>
@@ -110,7 +68,7 @@ export const ChangePassword = observer(function ChangePassword() {
         <Form context={form}>
           <ColoredContainer parent overflow compact vertical noWrap gap>
             <Group overflow box keepSize>
-              <ToolsPanel rounded minHeight>
+              <ToolsPanel size="large" rounded>
                 <ToolsAction icon="admin-save" viewBox="0 0 24 24" onClick={() => form.submit()}>
                   {translate('plugin_user_profile_authentication_change_password_submit_label')}
                 </ToolsAction>
@@ -143,11 +101,12 @@ export const ChangePassword = observer(function ChangePassword() {
                 mapValue={(value?: string) => value?.trim() ?? ''}
                 small
                 required
+                onChange={passwordRepeatValidation.revalidate}
               >
                 {translate('plugin_user_profile_authentication_change_password_new_password')}
               </InputField>
               <InputField
-                ref={passwordRepeatRef}
+                ref={passwordRepeatValidation.ref}
                 type="password"
                 name="repeatedPassword"
                 state={state}

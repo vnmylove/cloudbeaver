@@ -17,17 +17,20 @@
 package io.cloudbeaver.app;
 
 import io.cloudbeaver.auth.provider.local.LocalAuthProvider;
+import io.cloudbeaver.model.config.CBAppConfig;
 import io.cloudbeaver.server.CBApplication;
 import io.cloudbeaver.server.CBApplicationCE;
 import io.cloudbeaver.test.WebGQLClient;
+import io.cloudbeaver.test.platform.util.DBTestConstants;
 import io.cloudbeaver.utils.WebTestUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.SecurityUtils;
-import org.junit.AfterClass;
+import org.junit.jupiter.api.AfterAll;
 
 import java.net.CookieManager;
 import java.net.http.HttpClient;
+import java.util.Arrays;
 import java.util.Map;
 
 public class CEAppStarter {
@@ -43,8 +46,12 @@ public class CEAppStarter {
 
     public static void startServerIfNotStarted() throws Exception {
         System.out.println("Start CBApplication");
+        if (testApp != null) {
+            return;
+        }
         if (DBWorkbench.isPlatformStarted() && DBWorkbench.getPlatform().getApplication() instanceof CBApplication<?>) {
             testApp = (CBApplication<?>) DBWorkbench.getPlatform().getApplication();
+            enableTestDriver();
             return;
         }
         testApp = new CBApplicationCE();
@@ -64,9 +71,21 @@ public class CEAppStarter {
         if (!setUpIsDone) {
             throw new Exception("Server is not running");
         }
+        enableTestDriver();
     }
 
-    @AfterClass
+    private static void enableTestDriver() {
+        // A previous IDEA run may have persisted a runtime config that disables embedded drivers.
+        CBAppConfig config = testApp.getAppConfiguration();
+        String[] enabledDrivers = config.getEnabledDrivers();
+        if (!Arrays.asList(enabledDrivers).contains(DBTestConstants.H2_EMBEDDED_DRIVER_ID_FULL)) {
+            String[] updatedDrivers = Arrays.copyOf(enabledDrivers, enabledDrivers.length + 1);
+            updatedDrivers[enabledDrivers.length] = DBTestConstants.H2_EMBEDDED_DRIVER_ID_FULL;
+            config.setEnabledDrivers(updatedDrivers);
+        }
+    }
+
+    @AfterAll
     public static void shutdownServer() {
         testApp.stop();
     }

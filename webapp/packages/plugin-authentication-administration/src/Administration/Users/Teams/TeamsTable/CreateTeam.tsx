@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@ import { CreateTeamService } from './CreateTeamService.js';
 export const CreateTeam: React.FC = observer(function CreateTeam() {
   const translate = useTranslate();
   const styles = useS(style);
-  const service = useService(CreateTeamService);
+  const createTeamService = useService(CreateTeamService);
 
-  if (!service.data) {
+  if (!createTeamService.formState) {
     return null;
   }
 
@@ -30,7 +30,7 @@ export const CreateTeam: React.FC = observer(function CreateTeam() {
       </GroupTitle>
       <Container overflow vertical>
         <Loader suspense>
-          <TeamForm state={service.data} onCancel={service.cancelCreate} onSave={service.cancelCreate} />
+          <TeamForm state={createTeamService.formState} onCancel={createTeamService.cancelCreate} />
         </Loader>
       </Container>
     </Group>

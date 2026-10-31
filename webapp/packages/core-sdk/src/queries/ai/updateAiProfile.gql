@@ -1,0 +1,5 @@
+mutation updateAiProfile($config: AIConfigurationProfileInput!) {
+  profile: aiUpdateProfile(config: $config) {
+    ...AIAdminConfigurationProfileInfo
+  }
+}

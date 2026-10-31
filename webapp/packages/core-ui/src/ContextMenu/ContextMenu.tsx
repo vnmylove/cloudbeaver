@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,15 @@ import { MenuButton, MenuProvider, Menu, type HovercardStoreState, useMenuStore,
 import { RenderMenuItems } from './RenderMenuItems.js';
 import { type IMenuContext, MenuContext } from './MenuContext.js';
 
-export interface IContextMenuNewProps extends Omit<IContextMenuProps, 'placement'> {
+export interface IContextMenuNewProps extends IContextMenuProps {
   render?: React.ReactElement;
   placement?: HovercardStoreState['placement'];
   showOnHover?: boolean;
   ref?: React.ForwardedRef<HTMLButtonElement>;
   shift?: number;
   gutter?: number;
+  autoFocusOnShow?: boolean;
+  modal?: boolean;
 }
 
 export const ContextMenu = observer<IContextMenuNewProps>(function ContextMenuInner({
@@ -33,6 +35,8 @@ export const ContextMenu = observer<IContextMenuNewProps>(function ContextMenuIn
   rtl,
   shift,
   gutter,
+  autoFocusOnShow,
+  modal,
   ...rest
 }) {
   const translate = useTranslate();
@@ -40,6 +44,7 @@ export const ContextMenu = observer<IContextMenuNewProps>(function ContextMenuIn
   const menu = useMenuStore({ placement, rtl: rtl || parent?.rtl, open: visible });
   const isRtl = useStoreState(menu, 'rtl');
   const isMenuOpen = useStoreState(menu, 'open');
+  const isAutoFocus = useStoreState(menu, 'autoFocusOnShow');
 
   const handler = menuData.handler;
 
@@ -69,13 +74,22 @@ export const ContextMenu = observer<IContextMenuNewProps>(function ContextMenuIn
   );
 
   const showAtPosition = !!contextMenuPosition?.position;
+  const hasTrigger = !!rest.render || React.Children.toArray(children).length > 0;
+
   useLayoutEffect(() => {
     if (showAtPosition) {
       menu.show();
+      menu.render();
     }
   }, [showAtPosition, menu]);
 
   const menuContext = useMemo<IMenuContext>(() => ({ menu: menuData, rtl: isRtl }), [menuData, isRtl]);
+
+  useLayoutEffect(() => {
+    if (autoFocusOnShow && !isAutoFocus) {
+      menu.setAutoFocusOnShow(true);
+    }
+  }, [autoFocusOnShow, isAutoFocus, menu]);
 
   if (handler?.isHidden?.(menuData.context)) {
     return null;
@@ -84,10 +98,13 @@ export const ContextMenu = observer<IContextMenuNewProps>(function ContextMenuIn
   return (
     <MenuContext value={menuContext}>
       <MenuProvider store={menu} setOpen={handlers.handleVisibleSwitch}>
-        <MenuButton {...rest} title={translate(menuData.menu.info.tooltip)}>
-          {children}
-        </MenuButton>
+        {hasTrigger && (
+          <MenuButton {...rest} title={rest.title ?? translate(menuData.menu.info.tooltip || menuData.menu.info.label)}>
+            {children}
+          </MenuButton>
+        )}
         <Menu
+          modal={modal}
           aria-label={translate(menuData.menu.info.label)}
           getAnchorRect={contextMenuPosition ? handlers.getAnchorRect : undefined}
           shift={shift}

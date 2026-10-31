@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,8 @@ export class ConnectionOriginInfoTabService extends Bootstrap {
   override register(): void {
     this.connectionFormService.parts.add({
       key: 'origin',
-      order: 3,
+      icon: '/icons/plugin_connection_globe.svg',
+      order: 5,
       tab: () => OriginInfoTab,
       panel: () => OriginInfo,
       getLoader: (context, props) => {
@@ -40,7 +41,6 @@ export class ConnectionOriginInfoTabService extends Bootstrap {
         const key = optionsPart?.connectionKey;
 
         if (!key) {
-          console.warn('Cannot load connection origin info: connection key is not defined');
           return [];
         }
 

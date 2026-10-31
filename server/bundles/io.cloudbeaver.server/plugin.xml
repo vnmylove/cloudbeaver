@@ -22,15 +22,15 @@
         </service>
         <service id="navigator" label="Database navigator" description="Database navigator services"
                  class="io.cloudbeaver.service.navigator.WebServiceBindingNavigator">
-            <premission id="navigate" label="Navigate over database metadata"/>
+            <permission id="navigate" label="Navigate over database metadata"/>
         </service>
         <service id="sql" label="SQL processing" description="SQL processing and data read services"
                  class="io.cloudbeaver.service.sql.WebServiceBindingSQL">
-            <premission id="data.read" label="Data read" scope="data"/>
-            <premission id="data.update" label="Data update" scope="data"/>
-            <premission id="data.insert" label="Data insert" scope="data"/>
-            <premission id="data.delete" label="Data delete" scope="data"/>
-            <premission id="sql.execute" label="SQL execute" scope="sql"/>
+            <permission id="data.read" label="Data read" scope="data"/>
+            <permission id="data.update" label="Data update" scope="data"/>
+            <permission id="data.insert" label="Data insert" scope="data"/>
+            <permission id="data.delete" label="Data delete" scope="data"/>
+            <permission id="sql.execute" label="SQL execute" scope="sql"/>
         </service>
     </extension>
 
@@ -39,11 +39,14 @@
     </extension>
 
     <extension point="org.jkiss.dbeaver.ws.event.handler">
-        <eventHandler class="io.cloudbeaver.server.events.WSDefaultEventHandler">
+        <eventHandler class="io.cloudbeaver.server.events.WSServerConfigurationChangedEventHandler">
             <topic id="cb_config"/>
         </eventHandler>
         <eventHandler class="io.cloudbeaver.server.events.WSDataSourceUpdatedEventHandlerImpl">
             <topic id="cb_datasource"/>
+        </eventHandler>
+        <eventHandler class="io.cloudbeaver.server.events.WSNetworkProfileEventHandler">
+            <topic id="cb_profiles"/>
         </eventHandler>
         <eventHandler class="io.cloudbeaver.server.events.WSFolderUpdatedEventHandlerImpl">
             <topic id="cb_datasource_folder"/>

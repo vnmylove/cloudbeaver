@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@ import { useObjectRef } from '../../useObjectRef.js';
 import { useObservableRef } from '../../useObservableRef.js';
 import { useS } from '../../useS.js';
 import type { ITreeNodeState } from './ITreeNodeState.js';
-import style from './TreeNode.module.css';
+import componentStyle from './TreeNode.module.css';
 import { type ITreeNodeContext, TreeNodeContext } from './TreeNodeContext.js';
 
 interface Props extends ITreeNodeState {
   className?: string;
+  style?: React.CSSProperties;
   children?: React.ReactNode;
   onClick?: (leaf: boolean) => Promise<void> | void;
   onExpand?: () => Promise<void> | void;
@@ -43,12 +44,13 @@ export const TreeNode = observer<Props, HTMLDivElement | null>(
       externalExpanded,
       leaf = false,
       className,
+      style,
       children,
       ...handlers
     },
     ref,
   ) {
-    const styles = useS(style);
+    const styles = useS(componentStyle);
     const handlersRef = useObjectRef(handlers);
 
     const nodeContext = useObservableRef<IInnerTreeNodeContext>(
@@ -115,7 +117,7 @@ export const TreeNode = observer<Props, HTMLDivElement | null>(
     );
 
     return (
-      <div ref={ref} className={s(styles, { node: true }, className)}>
+      <div ref={ref} className={s(styles, { node: true }, className)} style={style}>
         <TreeNodeContext.Provider value={nodeContext}>{children}</TreeNodeContext.Provider>
       </div>
     );

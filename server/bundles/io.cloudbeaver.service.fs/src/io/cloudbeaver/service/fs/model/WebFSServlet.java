@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.model.navigator.fs.DBNPathBase;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.CommonUtils;
+import org.jkiss.utils.HttpConstants;
 import org.jkiss.utils.IOUtils;
 
 import java.io.IOException;
@@ -62,7 +63,7 @@ public class WebFSServlet extends WebServiceServletBase {
             return;
         }
         if (request.getMethod().equals("POST")) {
-            if (DBWorkbench.isDistributed() && !session.hasPermission(DBWConstants.PERMISSION_SQL_RESULT_UPDATE)) {
+            if (DBWorkbench.isDistributed() && !session.hasPermission(DBWConstants.PERMISSION_FS_RESOURCE_EDIT)) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Permission denied.");
                 return;
             }
@@ -76,7 +77,7 @@ public class WebFSServlet extends WebServiceServletBase {
     private void doGet(WebSession session, HttpServletRequest request, HttpServletResponse response) throws DBException, IOException {
         Path path = WebFSUtils.getPathFromNode(session, request.getParameter("nodePath"));
         session.addInfoMessage("Download data ...");
-        response.setHeader("Content-Type", "application/octet-stream");
+        response.setHeader(HttpConstants.HEADER_CONTENT_TYPE, "application/octet-stream");
         response.setHeader("Content-Disposition", "attachment; filename=\"" + path.getFileName() + "\"");
         response.setHeader("Content-Length", String.valueOf(Files.size(path)));
 
@@ -101,9 +102,10 @@ public class WebFSServlet extends WebServiceServletBase {
                 if (CommonUtils.isEmpty(fileName)) {
                     continue;
                 }
+                Path safeTarget = WebFSUtils.resolveSafeChild(path, fileName);
                 try (InputStream is = part.getInputStream()) {
-                    Files.copy(is, path.resolve(fileName));
-                    node.addChildResource(path.resolve(fileName));
+                    Files.copy(is, safeTarget);
+                    node.addChildResource(safeTarget);
                 }
             }
         } catch (Exception e) {

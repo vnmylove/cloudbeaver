@@ -1,0 +1,132 @@
+/*
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2026 DBeaver Corp and others
+ *
+ * Licensed under the Apache License, Version 2.0.
+ * you may not use this file except in compliance with the License.
+ */
+
+import { observer } from 'mobx-react-lite';
+
+import {
+  Button,
+  ColoredContainer,
+  Container,
+  Form,
+  GroupBack,
+  GroupTitle,
+  StatusMessage,
+  Text,
+  useForm,
+  useExecutor,
+  useTranslate,
+} from '@cloudbeaver/core-blocks';
+import { useService } from '@cloudbeaver/core-di';
+import { NotificationService } from '@cloudbeaver/core-events';
+import { ExecutorInterrupter } from '@cloudbeaver/core-executor';
+import { OptionsPanelService, TabList, TabPanelList, TabsState } from '@cloudbeaver/core-ui';
+import { getFirstException } from '@cloudbeaver/core-utils';
+import { AIProfilesResource, useAIProfileAuthorization } from '@cloudbeaver/plugin-ai-profiles';
+
+import { AIProfileCredentialsPanelService } from '../AIProfileCredentialsPanelService.js';
+
+const CREDENTIALS_TAB_ID = 'credentials';
+
+export const AIProfileCredentialsPanel = observer(function AIProfileCredentialsPanel() {
+  const translate = useTranslate();
+  const aiProfileCredentialsPanelService = useService(AIProfileCredentialsPanelService);
+  const notificationService = useService(NotificationService);
+  const aiProfilesResource = useService(AIProfilesResource);
+  const formState = aiProfileCredentialsPanelService.formState;
+  const authorization = useAIProfileAuthorization(formState);
+  const optionsPanelService = useService(OptionsPanelService);
+  useExecutor({
+    executor: optionsPanelService.closeTask,
+    handlers: [
+      async (stage, contexts) => {
+        if (
+          stage !== 'before' ||
+          !formState ||
+          aiProfileCredentialsPanelService.formState !== formState ||
+          ExecutorInterrupter.isInterrupted(contexts)
+        ) {
+          return;
+        }
+        if (!(await authorization.confirmLeave())) {
+          ExecutorInterrupter.interrupt(contexts);
+        }
+      },
+    ],
+  });
+  const form = useForm({
+    onSubmit: async function onSubmit() {
+      if (!formState) {
+        return;
+      }
+
+      const saved = await formState.save();
+      const exception = getFirstException(formState.exception);
+
+      if (saved) {
+        notificationService.logSuccess({
+          title: 'plugin_ai_user_profile_credentials_saved',
+          message: aiProfilesResource.get(formState.state.profileId)?.name,
+        });
+        await aiProfileCredentialsPanelService.back();
+      } else if (exception) {
+        notificationService.logException(exception, 'plugin_ai_credentials_save_failed');
+      }
+    },
+  });
+
+  if (!formState) {
+    return null;
+  }
+
+  const title = `${translate('ui_edit')} "${aiProfilesResource.get(formState.state.profileId)?.name ?? ''}"`;
+  const error = getFirstException(formState.exception);
+  const isSaving = !!formState.savingPromise;
+
+  return (
+    <ColoredContainer aria-label={title} parent vertical noWrap surface gap compact>
+      <GroupTitle header>
+        <GroupBack onClick={() => aiProfileCredentialsPanelService.back()}>
+          <Text truncate>{title}</Text>
+        </GroupBack>
+      </GroupTitle>
+      <Form context={form} contents>
+        <TabsState
+          container={aiProfileCredentialsPanelService.parts}
+          selectedId={CREDENTIALS_TAB_ID}
+          formState={formState}
+          authorization={authorization}
+        >
+          <Container noWrap vertical>
+            <Container
+              className="theme-border-color-background tw:relative tw:before:content-[''] tw:before:absolute tw:before:bottom-0 tw:before:w-full tw:before:border-b-2 tw:before:border-inherit"
+              gap
+              keepSize
+              noWrap
+            >
+              <Container fill>
+                <StatusMessage exception={error} />
+                <TabList disabled={formState.isDisabled} underline big />
+              </Container>
+              <Container keepSize noWrap center gap compact>
+                <Button type="button" variant="secondary" onClick={() => aiProfileCredentialsPanelService.close()}>
+                  {translate('ui_processing_cancel')}
+                </Button>
+                <Button type="submit" disabled={formState.isDisabled || isSaving || !formState.isChanged}>
+                  {translate('ui_processing_save')}
+                </Button>
+              </Container>
+            </Container>
+            <Container vertical>
+              <TabPanelList />
+            </Container>
+          </Container>
+        </TabsState>
+      </Form>
+    </ColoredContainer>
+  );
+});

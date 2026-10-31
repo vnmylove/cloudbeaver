@@ -8,6 +8,9 @@
   },
   "references": [
     {
+      "path": "../../common-react/@dbeaver/ui-kit"
+    },
+    {
       "path": "../../common-typescript/@dbeaver/jdbc-uri-parser"
     },
     {
@@ -62,6 +65,9 @@
       "path": "../core-sdk"
     },
     {
+      "path": "../core-session-actions"
+    },
+    {
       "path": "../core-settings"
     },
     {
@@ -77,7 +83,13 @@
       "path": "../plugin-authentication"
     },
     {
+      "path": "../plugin-data-grid"
+    },
+    {
       "path": "../plugin-navigation-tree"
+    },
+    {
+      "path": "../plugin-network-handlers"
     },
     {
       "path": "../plugin-projects"
@@ -90,8 +102,7 @@
     "__custom_mocks__/**/*",
     "src/**/*",
     "src/**/*.json",
-    "src/**/*.css",
-    "src/**/*.scss"
+    "src/**/*.css"
   ],
   "exclude": [
     "**/node_modules",

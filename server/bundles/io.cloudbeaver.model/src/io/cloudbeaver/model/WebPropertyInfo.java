@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,23 @@
 package io.cloudbeaver.model;
 
 import io.cloudbeaver.model.session.WebSession;
+import io.cloudbeaver.server.CBConstants;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.*;
 import org.jkiss.dbeaver.model.connection.DBPDriverConfigurationType;
+import org.jkiss.dbeaver.model.impl.PropertyDescriptor;
 import org.jkiss.dbeaver.model.impl.ProviderPropertyDescriptor;
 import org.jkiss.dbeaver.model.meta.IPropertyValueListProvider;
 import org.jkiss.dbeaver.model.meta.Property;
+import org.jkiss.dbeaver.model.meta.PropertyConstraints;
 import org.jkiss.dbeaver.model.meta.PropertyLength;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyDescriptor;
 import org.jkiss.dbeaver.model.preferences.DBPPropertySource;
 import org.jkiss.dbeaver.registry.settings.ProductSettingDescriptor;
 import org.jkiss.dbeaver.runtime.properties.ObjectPropertyDescriptor;
+import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.lang.reflect.Array;
@@ -39,63 +43,67 @@ import java.util.*;
  * Web connection info
  */
 public class WebPropertyInfo {
-    private WebSession session;
-    private DBPPropertyDescriptor property;
-    private DBPPropertySource propertySource;
-    private boolean showProtected;
+    @NotNull
+    private final WebSession session;
+    @NotNull
+    private final DBPPropertyDescriptor property;
+    @Nullable
+    private final DBPPropertySource propertySource;
 
-    private Object[] validValues;
-
-    private String[] supportedConfigurationTypes = new String[0];
-
-    private Object defaultValue;
-
-    public WebPropertyInfo(WebSession session, DBPPropertyDescriptor property, DBPPropertySource propertySource) {
+    public WebPropertyInfo(
+        @NotNull WebSession session,
+        @NotNull DBPPropertyDescriptor property,
+        @Nullable DBPPropertySource propertySource
+    ) {
         this.session = session;
         this.property = property;
         this.propertySource = propertySource;
     }
 
-    public WebPropertyInfo(WebSession session, DBPPropertyDescriptor property) {
-        this.session = session;
-        this.property = property;
-    }
-
-    public boolean isShowProtected() {
-        return showProtected;
-    }
-
-    public void setShowProtected(boolean showProtected) {
-        this.showProtected = showProtected;
+    public WebPropertyInfo(@NotNull WebSession session, @NotNull DBPPropertyDescriptor property) {
+        this(session, property, null);
     }
 
     ///////////////////////////////////
     // General properties
     ///////////////////////////////////
 
+    @NotNull
     @Property
     public String getId() {
         return CommonUtils.toString(property.getId());
     }
 
+    @NotNull
     @Property
     public String getDisplayName() {
-        if (property instanceof DBPNamedObjectLocalized) {
-            return ((DBPNamedObjectLocalized) property).getLocalizedName(session.getLocale());
+        if (property instanceof DBPNamedObjectLocalized localized) {
+            return localized.getLocalizedName(session.getLocale());
         } else {
             return property.getDisplayName();
         }
     }
 
+    @Nullable
     @Property
     public String getDescription() {
-        if (property instanceof DBPObjectWithDescriptionLocalized) {
-            return ((DBPObjectWithDescriptionLocalized) property).getLocalizedDescription(session.getLocale());
+        if (property instanceof DBPObjectWithDescriptionLocalized localized) {
+            return localized.getLocalizedDescription(session.getLocale());
         } else {
             return property.getDescription();
         }
     }
 
+    @Nullable
+    @Property
+    public String getDocumentationPath() {
+        if (property instanceof ProductSettingDescriptor productSettingDescriptor) {
+            return productSettingDescriptor.getDocumentationPath();
+        }
+        return null;
+    }
+
+    @Nullable
     @Property
     public String getHint() {
         return property.getHint();
@@ -106,48 +114,65 @@ public class WebPropertyInfo {
         return property instanceof ObjectPropertyDescriptor ? ((ObjectPropertyDescriptor) property).getOrderNumber() : -1;
     }
 
+    @Nullable
     @Property
     public String getCategory() {
         return property.getCategory();
     }
 
+    @Nullable
     @Property
     public String getType() {
         return getDataType();
     }
 
+    @Nullable
     @Property
     public String getDataType() {
         Class<?> dataType = property.getDataType();
         return dataType == null ? null : dataType.getSimpleName();
     }
 
+    @NotNull
     @Property
     public PropertyLength getLength() {
         return property.getLength();
     }
 
+    @Nullable
     @Property
     public Object getDefaultValue() throws DBException {
-        var defaultValue = property.getDefaultValue() == null ? this.defaultValue : property.getDefaultValue();
-        return defaultValue == null ? getValue() : defaultValue;
+        Object defaultValue = property.getDefaultValue();
+        if (property instanceof ObjectPropertyDescriptor && defaultValue == null) {
+            return getValue();
+        }
+        return defaultValue;
     }
 
+    @Nullable
+    @Property
+    public PropertyConstraints getConstraints() {
+        return property instanceof ObjectPropertyDescriptor descriptor ? descriptor.getConstraints() : null;
+    }
+
+    @Nullable
     @Property
     public Object getValue() throws DBException {
         Object value = propertySource == null ? null : propertySource.getPropertyValue(session.getProgressMonitor(), property.getId());
-        if (property instanceof ObjectPropertyDescriptor) {
-            ObjectPropertyDescriptor opd = (ObjectPropertyDescriptor) property;
-            if (!showProtected && opd.isPassword() || opd.isHidden()) {
-                if (value == null || value.toString().isEmpty()) {
-                    return "";
-                }
-                return "******";
+        if (property instanceof ObjectPropertyDescriptor opd &&
+            (opd.isPassword() || opd.isHidden())
+        ) {
+            return maskValue(value);
+        } else if (property instanceof PropertyDescriptor pd) {
+            String[] features = pd.getFeatures();
+            if (features != null && ArrayUtils.contains(features, DBConstants.PROP_FEATURE_PASSWORD)) {
+                return maskValue(value);
             }
         }
         return value == null ? null : makePropertyValue(value);
     }
 
+    @Nullable
     @Property
     public Object[] getValidValues() {
         if (property instanceof IPropertyValueListProvider) {
@@ -160,17 +185,24 @@ public class WebPropertyInfo {
                 }
                 return validValues;
             }
-            return validValues;
         }
-        return validValues;
+        return null;
     }
 
+    @Property
+    public boolean isAllowCustomValue() {
+        return property instanceof IPropertyValueListProvider<?> valueListProvider &&
+            valueListProvider.allowCustomValue();
+    }
+
+    @NotNull
     @Property
     public String[] getFeatures() {
         String[] features = property.getFeatures();
         return features == null ? new String[0] : features;
     }
 
+    @NotNull
     @Property
     public String[] getSupportedConfigurationTypes() {
         if (property instanceof ProviderPropertyDescriptor) {
@@ -178,7 +210,7 @@ public class WebPropertyInfo {
                 .map(DBPDriverConfigurationType::toString)
                 .toArray(String[]::new);
         }
-        return supportedConfigurationTypes;
+        return new String[0];
     }
 
     @Property
@@ -199,12 +231,14 @@ public class WebPropertyInfo {
         return false;
     }
 
+    @NotNull
     @Override
     public String toString() {
         return CommonUtils.toString(property.getId());
     }
 
-    private Object makePropertyValue(Object value) {
+    @Nullable
+    private Object makePropertyValue(@Nullable Object value) {
         if (value == null) {
             return null;
 //        } else if (value instanceof DBSObject) {
@@ -286,25 +320,19 @@ public class WebPropertyInfo {
         return conditions;
     }
 
-
-    //TODO: delete after refactoring on front-end
-    public void setDefaultValue(String defaultValue) {
-        this.defaultValue = defaultValue;
-    }
-    //TODO: delete after refactoring on front-end
-    public void setValidValues(Object[] validValues) {
-        this.validValues = validValues;
-    }
-
-    //TODO: delete after refactoring on front-end
-    public void setSupportedConfigurationTypes(String[] supportedConfigurationTypes) {
-        this.supportedConfigurationTypes = supportedConfigurationTypes;
-    }
-
     public record Condition(@NotNull String expression, @NotNull Type conditionType) {
         public enum Type {
             HIDE,
             READ_ONLY
+        }
+    }
+
+    @NotNull
+    private static String maskValue(@Nullable Object value) {
+        if (value == null || value.toString().isEmpty()) {
+            return "";
+        } else {
+            return CBConstants.SECURED_VALUE;
         }
     }
 }

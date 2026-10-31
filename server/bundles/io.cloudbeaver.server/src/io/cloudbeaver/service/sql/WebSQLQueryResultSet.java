@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,10 +67,10 @@ public class WebSQLQueryResultSet {
         this.columns = columns;
     }
 
-    public void setColumns(DBDAttributeBinding[] bindings) {
+    public void setColumns(@NotNull DBDAttributeBinding[] bindings) {
         WebSQLQueryResultColumn[] columns = new WebSQLQueryResultColumn[bindings.length];
         for (int i = 0; i < bindings.length; i++) {
-            columns[i] = new WebSQLQueryResultColumn(bindings[i]);
+            columns[i] = new WebSQLQueryResultColumn(bindings[i], i);
         }
         this.columns = columns;
     }
@@ -184,8 +184,9 @@ public class WebSQLQueryResultSet {
     /**
      * Sets info about read-only status of a result set.
      */
-    public void setReadOnlyInfo(@NotNull DBCExecutionContext executionContext) {
+    public void setReadOnlyInfo(@Nullable DBCExecutionContext executionContext) {
         this.readOnly = DBExecUtils.isResultSetReadOnly(executionContext);
-        this.readOnlyStatus = DBExecUtils.getResultSetReadOnlyStatus(executionContext.getDataSource().getContainer());
+        this.readOnlyStatus = DBExecUtils.getResultSetReadOnlyStatus(
+            executionContext == null ? null : executionContext.getDataSource().getContainer());
     }
 }

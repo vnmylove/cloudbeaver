@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,8 +25,6 @@ import io.cloudbeaver.service.fs.model.FSFile;
 import io.cloudbeaver.service.fs.model.FSFileSystem;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
-import org.jkiss.dbeaver.model.app.DBPProject;
-import org.jkiss.dbeaver.model.navigator.DBNProject;
 import org.jkiss.dbeaver.model.navigator.fs.DBNFileSystem;
 import org.jkiss.dbeaver.model.navigator.fs.DBNFileSystems;
 import org.jkiss.dbeaver.model.navigator.fs.DBNPathBase;
@@ -35,6 +33,7 @@ import org.jkiss.dbeaver.runtime.DBWorkbench;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.Arrays;
@@ -50,18 +49,12 @@ public class WebServiceFS implements DBWServiceFS {
 
     @NotNull
     @Override
-    public FSFileSystem[] getAvailableFileSystems(@NotNull WebSession webSession, @NotNull String projectId)
-        throws DBWebException {
+    public FSFileSystem[] getAvailableFileSystems(@NotNull WebSession webSession, @NotNull String projectId) throws DBWebException {
         try {
-            DBPProject project = webSession.getProjectById(projectId);
-            if (project == null) {
-                throw new DBException(MessageFormat.format("Project ''{0}'' is not found in session", projectId));
+            DBNFileSystems dbnFileSystems = webSession.getNavigatorModelOrThrow().getRoot().getExtraNode(DBNFileSystems.class);
+            if (dbnFileSystems == null) {
+                throw new DBWebException("File systems not found in navigator");
             }
-            DBNProject projectNode = webSession.getNavigatorModelOrThrow().getRoot().getProjectNode(project);
-            if (projectNode == null) {
-                throw new DBException(MessageFormat.format("Project ''{0}'' is not found in navigator model", projectId));
-            }
-            DBNFileSystems dbnFileSystems = projectNode.getExtraNode(DBNFileSystems.class);
             var fsRegistry = FileSystemProviderRegistry.getInstance();
             DBNFileSystem[] children = dbnFileSystems.getChildren(webSession.getProgressMonitor());
             if (children == null) {
@@ -183,7 +176,7 @@ public class WebServiceFS implements DBWServiceFS {
             if (!Files.isDirectory(parentNode.getPath())) {
                 throw new DBException(MessageFormat.format("Node ''{0}'' is not a directory", parentPath));
             }
-            Path filePath = parentNode.getPath().resolve(fileName);
+            Path filePath = WebFSUtils.resolveSafeChild(parentNode.getPath(), fileName);
             Files.createFile(filePath);
             parentNode.addChildResource(filePath);
             return new FSFile(parentNode.getChild(filePath));
@@ -213,6 +206,8 @@ public class WebServiceFS implements DBWServiceFS {
             oldParentNode.removeChildResource(oldNode.getPath());
             parentNode.addChildResource(to);
             return new FSFile(parentNode.getChild(to));
+        } catch (NoSuchFileException e) {
+            throw new DBWebException("File not found. Please refresh the catalog and check if file exists.");
         } catch (Exception e) {
             throw new DBWebException("Failed to move file: " + e.getMessage(), e);
         }
@@ -271,7 +266,7 @@ public class WebServiceFS implements DBWServiceFS {
             if (!Files.isDirectory(parentNode.getPath())) {
                 throw new DBException(MessageFormat.format("Node ''{0}'' is not a directory", parentPath));
             }
-            Path folderPath = parentNode.getPath().resolve(folderName);
+            Path folderPath = WebFSUtils.resolveSafeChild(parentNode.getPath(), folderName);
             Files.createDirectory(folderPath);
             parentNode.addChildResource(folderPath);
             return new FSFile(parentNode.getChild(folderPath));

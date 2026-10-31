@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,17 +26,21 @@ import io.cloudbeaver.utils.CBModelConstants;
 import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
+import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBPDataKind;
 import org.jkiss.dbeaver.model.DBPEvaluationContext;
+import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.*;
 import org.jkiss.dbeaver.model.exec.DBCException;
+import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
+import org.jkiss.dbeaver.model.exec.DBCExecutionPurpose;
 import org.jkiss.dbeaver.model.exec.DBCSession;
 import org.jkiss.dbeaver.model.gis.DBGeometry;
 import org.jkiss.dbeaver.model.gis.GisConstants;
 import org.jkiss.dbeaver.model.gis.GisTransformUtils;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
-import org.jkiss.dbeaver.model.struct.DBSAttributeBase;
-import org.jkiss.dbeaver.model.struct.DBSTypedObject;
+import org.jkiss.dbeaver.model.struct.*;
 import org.jkiss.dbeaver.model.websocket.event.WSEvent;
 import org.jkiss.dbeaver.utils.ContentUtils;
 import org.jkiss.dbeaver.utils.GeneralUtils;
@@ -50,6 +54,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 /**
  * Web SQL utils.
@@ -116,8 +121,7 @@ public class WebSQLUtils {
             Map<String, Object> map = createMapOfType(WebSQLConstants.VALUE_TYPE_COLLECTION);
             map.put("value", items);
             return map;
-        } else if (value instanceof DBDComposite) {
-            DBDComposite composite = (DBDComposite)value;
+        } else if (value instanceof DBDComposite composite && composite.getAttributes().length > 0) {
             Map<String, Object> struct = new LinkedHashMap<>();
             for (DBSAttributeBase attr : composite.getAttributes()) {
                 struct.put(attr.getName(), makeWebCellValue(session, attr, composite.getAttributeValue(attr), dataFormat));
@@ -266,12 +270,115 @@ public class WebSQLUtils {
         return value;
     }
 
+
+    /**
+     * Need to convert string values in constraints to real values using value handlers
+     */
+    public static void convertConstraintValues(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull WebSQLResultsInfo resultInfo,
+        @NotNull List<DBDAttributeConstraint> constraints
+    ) {
+        DBCExecutionContext executionContext = DBUtils.getDefaultContext(resultInfo.getDataContainer(), false);
+        if (executionContext == null || !executionContext.isConnected()) {
+            return;
+        }
+        DBCSession session = null;
+        try {
+            for (DBDAttributeConstraint constraint : constraints) {
+                Object constraintValue = constraint.getValue();
+                if (!(constraintValue instanceof String || constraintValue instanceof Object[]) ||
+                    !(constraint.getAttribute() instanceof DBDAttributeBinding binding)) {
+                    continue;
+                }
+                if (session == null) {
+                    session = executionContext.openSession(monitor, DBCExecutionPurpose.UTIL, "Convert filter values");
+                }
+                Object[] values = constraintValue instanceof Object[] array ? array : new Object[] { constraintValue };
+                for (int i = 0; i < values.length; i++) {
+                    if (!(values[i] instanceof String strValue)) {
+                        continue;
+                    }
+                    try {
+                        Object value = binding.getValueHandler().getValueFromObject(session, binding, strValue, false, false);
+                        if (value != null) {
+                            if (constraintValue instanceof String) {
+                                constraint.setValue(value);
+                            } else {
+                                values[i] = value;
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.debug("Can't convert filter value '" + strValue + "' for attribute '" + binding.getName() + "'", e);
+                    }
+                }
+            }
+        } finally {
+            if (session != null) {
+                session.close();
+            }
+        }
+    }
+
     /**
      * Returns fully qualified name for a column.
      */
     @NotNull
     public static String getColumnName(@NotNull DBDAttributeBinding binding) {
         return binding.getFullyQualifiedName(DBPEvaluationContext.UI);
+    }
+
+    @NotNull
+    public static Map<String, Object> makeDocumentValueMap(
+        @NotNull DBDAttributeBinding documentAttribute,
+        @NotNull DBDAttributeBinding[] attributes,
+        @NotNull Object[] values
+    ) {
+        if (attributes.length != values.length) {
+            throw new IllegalArgumentException("Document attributes and values have different sizes");
+        }
+        Map<String, Object> document = new LinkedHashMap<>();
+        for (int i = 0; i < attributes.length; i++) {
+            putDocumentValue(document, documentAttribute, attributes[i], values[i]);
+        }
+        return document;
+    }
+
+    private static void putDocumentValue(
+        @NotNull Map<String, Object> document,
+        @NotNull DBDAttributeBinding documentAttribute,
+        @NotNull DBDAttributeBinding attribute,
+        @Nullable Object value
+    ) {
+        LinkedList<String> path = new LinkedList<>();
+        for (DBDAttributeBinding current = attribute; current != null && current != documentAttribute;
+             current = current.getParentObject()) {
+            path.addFirst(current.getName());
+        }
+        if (path.isEmpty() || attribute.getTopParent() != documentAttribute) {
+            return;
+        }
+        Map<String, Object> target = document;
+        while (path.size() > 1) {
+            String name = path.removeFirst();
+            Object nestedValue = target.get(name);
+            if (nestedValue instanceof Map<?, ?> nestedMap) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> typedNestedMap = (Map<String, Object>) nestedMap;
+                target = typedNestedMap;
+            } else if (nestedValue != null) {
+                throw new IllegalArgumentException("Conflicting document attribute path at '" + name + "'");
+            } else {
+                Map<String, Object> nestedMap = new LinkedHashMap<>();
+                target.put(name, nestedMap);
+                target = nestedMap;
+            }
+        }
+        String name = path.getFirst();
+        if (target.containsKey(name)) {
+            throw new IllegalArgumentException("Duplicate document attribute path at '" + name + "'");
+        }
+        target.put(name, value);
     }
 
     @NotNull
@@ -328,5 +435,193 @@ public class WebSQLUtils {
         } finally {
             webSession.removeAttribute(attributeName);
         }
+    }
+
+    @NotNull
+    public static List<WebSQLQueryResultAssociation> collectAssociations(
+        @NotNull WebSession session,
+        @NotNull DBDAttributeBinding[] bindings
+    ) {
+        return collectWebSQLQueryResultAssociation(session, bindings, false);
+    }
+
+    @NotNull
+    public static List<WebSQLQueryResultAssociation> collectReferences(
+        @NotNull WebSession session,
+        @NotNull DBDAttributeBinding[] bindings
+    ) {
+        return collectWebSQLQueryResultAssociation(session, bindings, true);
+    }
+
+    @NotNull
+    private static List<WebSQLQueryResultAssociation> collectWebSQLQueryResultAssociation(
+        @NotNull WebSession session,
+        @NotNull DBDAttributeBinding[] bindings,
+        boolean reverse
+    ) {
+        Map<DBSEntityAttribute, Integer> attrToIndex = new HashMap<>();
+        Set<DBSEntity> entities = new LinkedHashSet<>();
+        for (int i = 0; i < bindings.length; i++) {
+            DBSEntityAttribute ea = bindings[i].getEntityAttribute();
+            if (ea == null) {
+                continue;
+            }
+            attrToIndex.putIfAbsent(ea, i);
+            DBSEntity parent = ea.getParentObject();
+            entities.add(parent);
+        }
+
+        Function<DBSEntityAttribute, DBDAttributeBinding> attrToBinding = attr -> {
+            Integer idx = attrToIndex.get(attr);
+            return idx == null ? null : bindings[idx];
+        };
+
+        List<WebSQLQueryResultAssociation> result = new ArrayList<>();
+        DBRProgressMonitor monitor = session.getProgressMonitor();
+        for (DBSEntity entity : entities) {
+            try {
+                List<DBSEntityAssociation> source = reverse
+                    ? DBStructUtils.readReferences(monitor, entity, attrToBinding)
+                    : DBStructUtils.readAssociations(monitor, entity, attrToBinding);
+                for (DBSEntityAssociation association : source) {
+                    List<WebSQLReferenceColumnMapping> mapping = collectColumnMapping(monitor, association, reverse, attrToIndex);
+                    if (mapping != null) {
+                        result.add(new WebSQLQueryResultAssociation(session, association, reverse, mapping));
+                    }
+                }
+            } catch (DBException e) {
+                log.debug("Error collecting references for entity " + entity.getName(), e);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Pairs source-side attributes (in our result set) with target-side attributes
+     */
+    @Nullable
+    private static List<WebSQLReferenceColumnMapping> collectColumnMapping(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull DBSEntityAssociation association,
+        boolean reverse,
+        @NotNull Map<DBSEntityAttribute, Integer> attrToIndex
+    ) throws DBException {
+        if (!(association instanceof DBSEntityReferrer associationReferrer)) {
+            return null;
+        }
+        DBSEntityConstraint refConstraint = association.getReferencedConstraint();
+        if (!(refConstraint instanceof DBSEntityReferrer constraintReferrer)) {
+            return null;
+        }
+        DBSEntityReferrer sourceSide = reverse ? constraintReferrer : associationReferrer;
+        DBSEntityReferrer targetSide = reverse ? associationReferrer : constraintReferrer;
+
+        List<? extends DBSEntityAttributeRef> sourceAttrs = sourceSide.getAttributeReferences(monitor);
+        List<? extends DBSEntityAttributeRef> targetAttrs = targetSide.getAttributeReferences(monitor);
+        if (sourceAttrs == null || targetAttrs == null
+            || sourceAttrs.isEmpty() || sourceAttrs.size() != targetAttrs.size()
+        ) {
+            return null;
+        }
+        List<WebSQLReferenceColumnMapping> mapping = new ArrayList<>(sourceAttrs.size());
+        for (int i = 0; i < sourceAttrs.size(); i++) {
+            DBSEntityAttribute sourceAttr = sourceAttrs.get(i).getAttribute();
+            Integer sourceIdx = sourceAttr == null ? null : attrToIndex.get(sourceAttr);
+            if (sourceIdx == null) {
+                return null;
+            }
+            DBSEntityAttribute targetAttr = targetAttrs.get(i).getAttribute();
+            if (targetAttr == null) {
+                return null;
+            }
+            // getOrdinalPosition() is 1-based. Normalize to 0-based to match sourceColumnIndex
+            int targetIdx = targetAttr.getOrdinalPosition() - 1;
+            mapping.add(new WebSQLReferenceColumnMapping(
+                sourceIdx, sourceAttr.getName(), targetIdx, targetAttr.getName()));
+        }
+        return mapping;
+    }
+
+    @Nullable
+    public static Object convertInputCellValue(
+        @NotNull DBCSession session,
+        @NotNull DBDAttributeBinding updateAttribute,
+        @NotNull Object cellRawValue,
+        boolean justGenerateScript
+    ) throws DBCException {
+        Object plainCellValue = makePlainCellValue(session, updateAttribute, cellRawValue);
+        Object realCellValue = plainCellValue;
+        // In some cases we already have final value here
+        if (!(realCellValue instanceof DBDValue)) {
+            try {
+                realCellValue = updateAttribute.getValueHandler().getValueFromObject(
+                    session,
+                    updateAttribute,
+                    plainCellValue,
+                    false,
+                    true
+                );
+                //FIXME: fix array editing for nosql databases
+                if (realCellValue == null && plainCellValue != null && updateAttribute.getDataKind() == DBPDataKind.ARRAY) {
+                    throw new DBCException("Array update is not supported");
+                }
+            } catch (DBCException e) {
+                //checks if this function is used only for script generation
+                if (justGenerateScript) {
+                    return null;
+                } else {
+                    throw e;
+                }
+            }
+        }
+        return realCellValue;
+    }
+
+    @NotNull
+    public static DBDDocument applyDocumentUpdate(
+        @NotNull DBDDocument document,
+        @Nullable DBDAttributeBinding documentAttribute,
+        @NotNull DBDAttributeBinding updateAttribute,
+        @Nullable Object value
+    ) throws DBCException {
+        if (updateAttribute == documentAttribute && value instanceof DBDDocument updatedDocument) {
+            return updatedDocument;
+        }
+        if (document instanceof DBDComposite composite) {
+            composite.setAttributeValue(updateAttribute, value);
+        }
+        return document;
+    }
+
+    @NotNull
+    public static DBDDocument makeDocumentInputValue(
+        @NotNull DBCSession session,
+        @NotNull DBSDocumentLocator dataContainer,
+        @NotNull WebSQLResultsInfo resultsInfo,
+        @NotNull WebSQLResultsRow row,
+        @Nullable Map<String, Object> metaData
+    ) throws DBException {
+        // Document reference
+        DBDDocument document = null;
+        Map<String, Object> keyMap = new LinkedHashMap<>();
+        DBDAttributeBinding[] attributes = resultsInfo.getAttributes();
+        for (int j = 0; j < attributes.length; j++) {
+            DBDAttributeBinding attr = attributes[j];
+            Object plainValue = makePlainCellValue(session, attr, row.getValues()[j]);
+            if (plainValue instanceof DBDDocument dbdDocument && dataContainer.isDocumentValid(dbdDocument)) {
+                // FIXME: Hack for DynamoDB. We pass entire document as a key
+                // FIXME: Let's just return it back for now
+                document = dbdDocument;
+                break;
+            }
+            keyMap.put(attr.getName(), plainValue);
+        }
+        if (document == null) {
+            document = dataContainer.findDocument(session, keyMap, metaData);
+            if (document == null) {
+                throw new DBCException("Error finding document by key " + keyMap);
+            }
+        }
+        return document;
     }
 }

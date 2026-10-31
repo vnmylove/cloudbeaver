@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,9 +27,12 @@ import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBFileController;
 import org.jkiss.dbeaver.model.app.DBPWorkspace;
-import org.jkiss.dbeaver.model.auth.AuthInfo;
+import org.jkiss.dbeaver.model.auth.SMAuthConfiguration;
 import org.jkiss.dbeaver.model.auth.SMCredentialsProvider;
+import org.jkiss.dbeaver.model.auth.SMSessionContext;
 import org.jkiss.dbeaver.model.rm.RMController;
+import org.jkiss.dbeaver.model.secret.DBSSecretController;
+import org.jkiss.dbeaver.model.secret.SecretControllerRegistry;
 import org.jkiss.dbeaver.model.security.SMAdminController;
 import org.jkiss.dbeaver.model.security.SMController;
 import org.jkiss.dbeaver.registry.LocalFileController;
@@ -75,13 +78,27 @@ public class CBApplicationCE extends CBApplication<CBServerConfig> {
         );
     }
 
-
+    @NotNull
+    @Override
+    public DBSSecretController getSecretController(
+        @NotNull SMCredentialsProvider credentialsProvider,
+        @Nullable SMSessionContext smSessionContext
+    ) throws DBException {
+        return SecretControllerRegistry.getInstance().getAuthorizedSecretController(
+            getServerConfiguration().getSecretControllerId(), credentialsProvider, smSessionContext
+        );
+    }
 
     @NotNull
     @Override
-    public RMController createResourceController(@NotNull SMCredentialsProvider credentialsProvider,
-                                                 @NotNull DBPWorkspace workspace) throws DBException {
-        return LocalResourceController.builder(credentialsProvider, workspace, this::getSecurityController).build();
+    public RMController createResourceController(
+        @NotNull SMCredentialsProvider credentialsProvider,
+        @NotNull DBPWorkspace workspace
+    ) throws DBException {
+        var lockManager = createLockManager();
+        return LocalResourceController
+            .builder(credentialsProvider, workspace, lockManager, this::getSecurityController)
+            .build();
     }
 
     @NotNull
@@ -90,6 +107,7 @@ public class CBApplicationCE extends CBApplication<CBServerConfig> {
         return new LocalFileController(DBWorkbench.getPlatform().getWorkspace().getAbsolutePath().resolve(DBFileController.DATA_FOLDER));
     }
 
+    @NotNull
     @Override
     public CBServerConfigurationControllerEmbedded<CBServerConfig> getServerConfigurationController() {
         return serverConfigController;
@@ -98,7 +116,7 @@ public class CBApplicationCE extends CBApplication<CBServerConfig> {
     protected void finishSecurityServiceConfiguration(
         @NotNull String adminName,
         @Nullable String adminPassword,
-        @NotNull List<AuthInfo> authInfoList
+        @NotNull List<SMAuthConfiguration> authInfoList
     ) throws DBException {
         if (securityController instanceof CBEmbeddedSecurityController<?> embeddedSecurityController) {
             embeddedSecurityController.finishConfiguration(adminName, adminPassword, authInfoList);

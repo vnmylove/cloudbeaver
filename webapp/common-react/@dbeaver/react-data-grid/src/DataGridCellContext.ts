@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,24 @@ export interface IDataGridCellRenderer {
   (propsOverride: Partial<IDataGridCellProps> & { [key: string]: any }): React.ReactNode;
 }
 
+export interface ICellChange {
+  rowIdx: number;
+  colIdx: number;
+  value: any;
+}
+
 export interface IDataGridCellContext {
   cellElement?: IGridReactiveValue<
     React.ReactNode,
     [rowIdx: number, colIdx: number, props: IDataGridCellProps, renderDefaultCell: IDataGridCellRenderer]
   >;
-  cell?: IGridReactiveValue<React.ReactNode, [rowIdx: number, colIdx: number]>;
+  cell?: IGridReactiveValue<React.ReactNode, [rowIdx: number, colIdx: number, tabIndex: number]>;
   cellText?: IGridReactiveValue<string, [rowIdx: number, colIdx: number]>;
   cellTooltip?: IGridReactiveValue<string, [rowIdx: number, colIdx: number]>;
+  getCellClassName?: IGridReactiveValue<string | undefined, [rowIdx: number, colIdx: number]>;
   getCellEditable?: (rowIdx: number, colIdx: number) => boolean;
   onCellChange?: (rowIdx: number, colIdx: number, value: any) => void;
+  onCellChangeBatch?: (changes: ICellChange[]) => void;
 }
 
 export const DataGridCellContext = createContext<IDataGridCellContext | null>(null);

@@ -27,14 +27,16 @@
     },
     {
       "path": "../core-utils"
+    },
+    {
+      "path": "../plugin-tailwindcss-theme"
     }
   ],
   "include": [
     "__custom_mocks__/**/*",
     "src/**/*",
     "src/**/*.json",
-    "src/**/*.css",
-    "src/**/*.scss"
+    "src/**/*.css"
   ],
   "exclude": [
     "**/node_modules",

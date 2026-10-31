@@ -4,7 +4,7 @@ export default [
 
   ['administration_configuration_wizard_welcome', 'Welcome'],
   ['administration_configuration_wizard_welcome_step_description', 'Welcome to {alias:product_full_name}'],
-  ['administration_configuration_wizard_welcome_title', 'Welcome to {alias:product_full_name}, cloud database management system!'],
+  ['administration_configuration_wizard_welcome_title', 'Welcome to {alias:product_full_name}, cloud database management system'],
   [
     'administration_configuration_wizard_welcome_message',
     'The easy configuration wizard will guide you through several simple steps to set up the server. You will need to set server information and administrator credentials. You can set up additional server parameters once the easy configuration is completed.',
@@ -76,6 +76,11 @@ export default [
   ],
   ['administration_configuration_wizard_configuration_security_public_credentials', 'Save users credentials'],
   ['administration_configuration_wizard_configuration_security_public_credentials_description', 'Allows to save credentials for non-admin users'],
+  ['administration_configuration_wizard_configuration_security_db_user_password_change', 'Allow database user password change'],
+  [
+    'administration_configuration_wizard_configuration_security_db_user_password_change_description',
+    'Enables users to change the password of the user associated with a database connection',
+  ],
   ['administration_configuration_wizard_configuration_navigator', 'Navigator'],
   ['administration_configuration_wizard_configuration_navigator_hide_folders', 'Hide Folders'],
   ['administration_configuration_wizard_configuration_navigator_hide_schemas', 'Hide Schemas'],

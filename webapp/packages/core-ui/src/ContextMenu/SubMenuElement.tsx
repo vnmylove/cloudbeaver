@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -131,9 +131,10 @@ export const SubMenuElement = observer<ISubMenuElementProps>(function SubMenuEle
         <MenuComponent
           menu={subMenuData}
           placement={placement}
-          render={<MenuItemGroupArrowElement title={label ?? tooltip} style={{ pointerEvents: 'auto' }} />}
+          title={translate(tooltip || label)}
+          render={<MenuItemGroupArrowElement style={{ pointerEvents: 'auto' }} />}
           id={subMenu.id}
-          aria-label={translate(subMenu.label)}
+          aria-label={translate(label || tooltip)}
           showOnHover={showSubmenuOnHover}
           disabled={disabled}
           onClick={handleClick}
@@ -189,6 +190,8 @@ export const SubMenuElement = observer<ISubMenuElementProps>(function SubMenuEle
     <MenuComponent
       menu={subMenuData}
       placement={placement}
+      title={translate(tooltip || label)}
+      aria-label={translate(label || tooltip)}
       gutter={-4}
       render={
         <MenuItem
@@ -201,7 +204,7 @@ export const SubMenuElement = observer<ISubMenuElementProps>(function SubMenuEle
               tooltip={tooltip}
               loading={loading}
               style={{ pointerEvents: 'auto' }}
-              aria-label={translate(subMenu.label)}
+              aria-label={translate(label || tooltip)}
               displaySubmenuMark
             />
           }

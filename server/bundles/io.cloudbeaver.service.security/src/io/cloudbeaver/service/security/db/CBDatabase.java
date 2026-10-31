@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.model.auth.AuthInfo;
+import org.jkiss.dbeaver.model.auth.SMAuthConfiguration;
 import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.impl.app.ApplicationRegistry;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
@@ -40,6 +40,7 @@ import org.jkiss.dbeaver.model.impl.jdbc.exec.JDBCTransaction;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.LoggingProgressMonitor;
 import org.jkiss.dbeaver.model.security.SMAdminController;
+import org.jkiss.dbeaver.model.security.SMTeamGrantType;
 import org.jkiss.dbeaver.model.security.user.SMTeam;
 import org.jkiss.dbeaver.model.security.user.SMUser;
 import org.jkiss.dbeaver.model.sql.db.InternalDB;
@@ -51,13 +52,17 @@ import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.dbeaver.utils.RuntimeUtils;
 import org.jkiss.utils.CommonUtils;
-import org.jkiss.utils.IOUtils;
 import org.jkiss.utils.SecurityUtils;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
@@ -72,7 +77,7 @@ import javax.sql.DataSource;
 public class CBDatabase extends InternalDB<WebDatabaseConfig> {
     private static final Log log = Log.getLog(CBDatabase.class);
 
-    private static final int CURRENT_SCHEMA_VERSION = 28;
+    private static final int CURRENT_SCHEMA_VERSION = 30;
     private static final String SCHEMA_ID = "CB_CE";
 
     private static final SQLSchemaConfig SCHEMA_CREATE_CONFIG = new SQLSchemaConfig(
@@ -184,7 +189,10 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
         return getDatabaseDriver(dataSourceProviderRegistry);
     }
 
-    private void setDefaultUserAndPassword(@NotNull DBPDriver driver) {
+    private void setDefaultUserAndPassword(@NotNull DBPDriver driver) throws DBException {
+        if (!driver.isEmbedded() && CommonUtils.isEmpty(databaseConfig.getPassword())) {
+            throw new DBException("Password must be specified for non-embedded database");
+        }
         if (!CommonUtils.isEmpty(databaseConfig.getUser()) || !driver.isEmbedded()) {
             return;
         }
@@ -194,11 +202,11 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
         if (driver.isAnonymousAccess()) {
             return;
         }
-        File pwdFile = application.getDataDirectory(true).resolve(DEFAULT_DB_PWD_FILE).toFile();
+        Path pwdFile = application.getDataDirectory(true).resolve(DEFAULT_DB_PWD_FILE);
         // Load or generate random password
-        if (pwdFile.exists()) {
-            try (FileReader fr = new FileReader(pwdFile)) {
-                databaseConfig.setPassword(IOUtils.readToString(fr));
+        if (Files.exists(pwdFile)) {
+            try {
+                databaseConfig.setPassword(Files.readString(pwdFile));
             } catch (Exception e) {
                 log.error(e);
             }
@@ -206,7 +214,7 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
         if (CommonUtils.isEmpty(databaseConfig.getPassword())) {
             databaseConfig.setPassword(SecurityUtils.generatePassword(8));
             try {
-                IOUtils.writeFileFromString(pwdFile, databaseConfig.getPassword());
+                Files.writeString(pwdFile, databaseConfig.getPassword());
             } catch (IOException e) {
                 log.error(e);
             }
@@ -247,7 +255,7 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
     public void finishConfiguration(
         @NotNull String adminName,
         @Nullable String adminPassword,
-        @NotNull List<AuthInfo> authInfoList
+        @NotNull List<SMAuthConfiguration> authInfoList
     ) throws DBException {
         if (!application.isConfigurationMode()) {
             throw new DBException("Database is already configured");
@@ -264,7 +272,7 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
         createAdminUser(adminName, adminPassword);
 
         // Associate all auth credentials with admin user
-        for (AuthInfo ai : authInfoList) {
+        for (SMAuthConfiguration ai : authInfoList) {
             if (!ai.getAuthProvider().equals(LocalAuthProviderConstants.PROVIDER_ID)) {
                 Map<String, Object> userCredentials = ai.getUserCredentials();
                 if (!CommonUtils.isEmpty(userCredentials)) {
@@ -412,6 +420,17 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
                     adminSecurityController.createTeam(defaultTeamId, defaultTeamId, null,
                         ApplicationRegistry.getInstance().getApplication().getName());
                 }
+                int updatedRows = JDBCUtils.executeUpdate(
+                    connection,
+                    "UPDATE {table_prefix}CB_USER_TEAM " +
+                        "SET GRANT_TYPE=? WHERE TEAM_ID=? AND GRANT_TYPE<>?",
+                    SMTeamGrantType.DEFAULT.name(),
+                    defaultTeamId,
+                    SMTeamGrantType.DEFAULT.name()
+                );
+                if (updatedRows > 0) {
+                    log.info("Normalized " + updatedRows + " default team grant(s)");
+                }
             }
             txn.commit();
         }
@@ -499,7 +518,7 @@ public class CBDatabase extends InternalDB<WebDatabaseConfig> {
     }
 
     public static boolean isDefaultH2Configuration(WebDatabaseConfig databaseConfiguration) {
-        var workspace = ServletAppUtils.getServletApplication().getWorkspaceDirectory();
+        var workspace = ServletAppUtils.getServletApplication().getWorkspacePath();
         var v1Path = workspace.resolve(".data").resolve(V1_DB_NAME);
         var v2Path = workspace.resolve(".data").resolve(V2_DB_NAME);
         var v1DefaultUrl = "jdbc:h2:" + v1Path;

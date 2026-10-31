@@ -1,0 +1,23 @@
+export default [
+  ['ai_administration_tab_title', 'AI Settings'],
+  ['ai_administration_tab_main', 'Main'],
+  ['ai_administration_settings', 'AI Settings'],
+  ['ai_administration_settings_save_success', 'AI settings saved'],
+  ['ai_administration_settings_save_fail', 'Failed to save AI settings'],
+  ['ai_administration_settings_load_fail', 'Failed to load AI settings'],
+  ['ai_administration_language_model_settings_save_fail', 'Failed to save engine settings'],
+  ['plugin_ai_administration_rag_label', 'Send only relevant objects to AI (Experimental)'],
+  [
+    'plugin_ai_administration_rag_description',
+    'DBeaver analyzes your request and sends only relevant objects to AI, improving response time and accuracy while reducing token usage (RAG). Currently supported only when using PostgreSQL Cloudbeaver DB and OpenAI/Copilot engines.',
+  ],
+  ['plugin_ai_administration_language_label', 'Language'],
+  ['plugin_ai_administration_language_description', 'Default language for AI responses'],
+  ['plugin_ai_administration_language_validation_error_title', 'Language validation error'],
+  ['plugin_ai_administration_language_validation_error', 'Language must contain only letters and hyphens'],
+  ['plugin_ai_administration_language_length_validation_error', 'Language must not be longer than 128 characters'],
+  ['plugin_ai_administration_default_profile_label', 'Default profile'],
+  ['plugin_ai_administration_default_profile_description', 'Profile used by default for AI features'],
+  ['plugin_ai_administration_default_profile_no_profiles_title', 'No profiles available'],
+  ['plugin_ai_administration_default_profile_no_profiles_message', 'Create a profile before selecting a default profile'],
+];

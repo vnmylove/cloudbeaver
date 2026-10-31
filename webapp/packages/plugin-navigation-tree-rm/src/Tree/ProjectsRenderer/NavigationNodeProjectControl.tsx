@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ export const NavigationNodeProjectControl: NavTreeControlComponent = observer<Na
     const navNodeInfoResource = useService(NavNodeInfoResource);
     const resourceManagerService = useService(ResourceManagerService);
 
-    const outdated = getComputed(() => navNodeInfoResource.isOutdated(node.id) && !treeNodeContext.loading);
+    const outdated = getComputed(() => navNodeInfoResource.isOutdated(node.uri) && !treeNodeContext.loading);
     const selected = treeNodeContext.selected;
     const resourceType = viewContext?.get(DATA_CONTEXT_RESOURCE_MANAGER_TREE_RESOURCE_TYPE_ID);
 
@@ -56,12 +56,16 @@ export const NavigationNodeProjectControl: NavTreeControlComponent = observer<Na
 
     function handlePortalClick(event: React.MouseEvent<HTMLDivElement>) {
       EventContext.set(event, EventStopPropagationFlag);
-      treeNodeContext.select();
+      if (!treeNodeContext.selected) {
+        treeNodeContext.select();
+      }
     }
 
     function handleContextMenuOpen(event: React.MouseEvent<HTMLDivElement>) {
       contextMenuPosition.open(event);
-      treeNodeContext.select();
+      if (!treeNodeContext.selected) {
+        treeNodeContext.select();
+      }
     }
 
     function handleClick(event: React.MouseEvent<HTMLDivElement>) {

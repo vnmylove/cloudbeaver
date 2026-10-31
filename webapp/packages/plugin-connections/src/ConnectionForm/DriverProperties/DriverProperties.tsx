@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,36 +9,40 @@ import { computed, observable, runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useMemo, useState } from 'react';
 
-import { ColoredContainer, Group, type IProperty, PropertiesTable, s, useAutoLoad, useExecutor, useResource, useS } from '@cloudbeaver/core-blocks';
-import { DBDriverResource } from '@cloudbeaver/core-connections';
+import { useAutoLoad, useExecutor } from '@cloudbeaver/core-blocks';
 import { type TabContainerPanelComponent, useTab } from '@cloudbeaver/core-ui';
 import { uuid } from '@cloudbeaver/core-utils';
 
-import styles from './DriverProperties.module.css';
+import { ConnectionSectionWrapper } from '../ConnectionSectionWrapper.js';
 import { getConnectionFormDriverPropertiesPart } from './getConnectionFormDriverPropertiesPart.js';
 import type { IConnectionFormProps } from '../IConnectionFormState.js';
 import { getConnectionFormOptionsPart } from '../Options/getConnectionFormOptionsPart.js';
+import { DriverPropertiesTable } from './DriverPropertiesTable/DriverPropertiesTable.js';
+import type { IDriverProperty } from './DriverPropertiesTable/IDriverProperty.js';
+import { useDriverProperties } from './useDriverProperties.js';
 
 export const DriverProperties: TabContainerPanelComponent<IConnectionFormProps> = observer(function DriverProperties({ tabId, formState }) {
   const { selected } = useTab(tabId);
-  const style = useS(styles);
   const driverPropertiesPart = getConnectionFormDriverPropertiesPart(formState);
   const optionsPart = getConnectionFormOptionsPart(formState);
 
   const [state] = useState(() => {
-    const propertiesList: IProperty[] = observable([]);
+    const propertiesList: IDriverProperty[] = observable([]);
 
     function add(key?: string, value?: string) {
+      const id = uuid();
       propertiesList.unshift({
-        id: uuid(),
+        id,
         key: key ?? '',
         defaultValue: value ?? '',
         keyPlaceholder: 'property',
         new: key === undefined,
+        custom: true,
       });
+      return id;
     }
 
-    function remove(property: IProperty) {
+    function remove(property: IDriverProperty) {
       propertiesList.splice(propertiesList.indexOf(property), 1);
     }
 
@@ -58,15 +62,12 @@ export const DriverProperties: TabContainerPanelComponent<IConnectionFormProps> 
     ],
   });
 
-  const driver = useResource(DriverProperties, DBDriverResource, {
-    key: (selected && optionsPart.state.driverId) || null,
-    includes: ['includeDriverProperties'] as const,
-  });
+  const propertiesState = useDriverProperties({ formState, config: optionsPart.state, selected });
 
   runInAction(() => {
-    if (driver.data) {
+    if (propertiesState.properties) {
       for (const key of Object.keys(driverPropertiesPart.state)) {
-        if (driver.data.driverProperties.some(property => property.id === key) || state.propertiesList.some(property => property.key === key)) {
+        if (propertiesState.properties.some(property => property.id === key) || state.propertiesList.some(property => property.key === key)) {
           continue;
         }
 
@@ -77,10 +78,10 @@ export const DriverProperties: TabContainerPanelComponent<IConnectionFormProps> 
 
   const joinedProperties = useMemo(
     () =>
-      computed<IProperty[]>(() => [
+      computed<IDriverProperty[]>(() => [
         ...state.propertiesList,
-        ...(driver.data?.driverProperties
-          ? driver.data.driverProperties.map<IProperty>(property => ({
+        ...(propertiesState.properties
+          ? propertiesState.properties.map<IDriverProperty>(property => ({
               id: property.id!,
               key: property.id!,
               keyPlaceholder: property.id,
@@ -89,27 +90,27 @@ export const DriverProperties: TabContainerPanelComponent<IConnectionFormProps> 
               defaultValue: property.defaultValue,
               description: property.description,
               validValues: property.validValues,
+              custom: false,
             }))
           : []),
       ]),
-    [driver.data],
+    [propertiesState.properties, state.propertiesList],
   );
 
   useAutoLoad(DriverProperties, driverPropertiesPart, selected);
+  useAutoLoad(DriverProperties, propertiesState, selected, undefined, true);
 
   return (
-    <ColoredContainer className={s(style, { coloredContainer: true })} parent>
-      <Group className={s(style, { group: true })} box large>
-        <PropertiesTable
-          className={s(style, { propertiesTable: true })}
+    <div className="tw:flex tw:min-h-0 tw:flex-1 tw:overflow-hidden">
+      <ConnectionSectionWrapper className="tw:max-w-3xl! tw:min-h-0 tw:flex-1">
+        <DriverPropertiesTable
           properties={joinedProperties.get()}
           propertiesState={driverPropertiesPart.state}
           readOnly={formState.isDisabled || formState.isReadOnly}
-          filterable
           onAdd={state.add}
           onRemove={state.remove}
         />
-      </Group>
-    </ColoredContainer>
+      </ConnectionSectionWrapper>
+    </div>
   );
 });

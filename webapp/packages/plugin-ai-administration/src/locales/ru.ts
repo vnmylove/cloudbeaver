@@ -1,0 +1,23 @@
+export default [
+  ['ai_administration_tab_title', 'AI Настройки'],
+  ['ai_administration_tab_main', 'Основные'],
+  ['ai_administration_settings', 'AI Настройки'],
+  ['ai_administration_settings_save_success', 'Настройки AI сохранены'],
+  ['ai_administration_settings_save_fail', 'Не удалось сохранить настройки AI'],
+  ['ai_administration_settings_load_fail', 'Не удалось загрузить настройки AI'],
+  ['ai_administration_language_model_settings_save_fail', 'Не удалось сохранить настройки энджина'],
+  ['plugin_ai_administration_rag_label', 'Отправлять в ИИ только релевантные объекты (Экспериментально)'],
+  [
+    'plugin_ai_administration_rag_description',
+    'DBeaver анализирует ваш запрос и отправляет в ИИ только релевантные объекты, что улучшает время отклика и точность, а также снижает использование токенов (RAG). В настоящее время поддерживается только при использовании PostgreSQL Cloudbeaver DB и OpenAI/Copilot.',
+  ],
+  ['plugin_ai_administration_language_label', 'Язык'],
+  ['plugin_ai_administration_language_description', 'Язык по умолчанию для ответов ИИ'],
+  ['plugin_ai_administration_language_validation_error_title', 'Ошибка проверки языка'],
+  ['plugin_ai_administration_language_validation_error', 'Язык должен содержать только буквы и дефисы'],
+  ['plugin_ai_administration_language_length_validation_error', 'Язык не должен превышать 128 символов'],
+  ['plugin_ai_administration_default_profile_label', 'Профиль по умолчанию'],
+  ['plugin_ai_administration_default_profile_description', 'Профиль, используемый по умолчанию для функций ИИ'],
+  ['plugin_ai_administration_default_profile_no_profiles_title', 'Нет доступных профилей'],
+  ['plugin_ai_administration_default_profile_no_profiles_message', 'Создайте профиль перед выбором профиля по умолчанию'],
+];

@@ -1,14 +1,15 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
+import { TabProvider, useStoreState, useTabStore } from '@dbeaver/ui-kit';
 import { action, observable } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useState } from 'react';
-import { useTabState } from 'reakit';
 
 import { useAutoLoad, useExecutor, useObjectRef, useObservableRef } from '@cloudbeaver/core-blocks';
 import { useDataContext } from '@cloudbeaver/core-data-context';
@@ -32,10 +33,11 @@ export type TabsStateProps<T = Record<string, any>> = ExtractContainerProps<T> &
     container?: ITabsContainer<T, any>;
     localState?: MetadataMap<string, any>;
     lazy?: boolean;
-    manual?: boolean;
     autoSelect?: boolean;
     tabList?: string[];
     enabledBaseActions?: boolean;
+    /** Open the tab menu on right-click. Disabled by default for each tab group. */
+    enabledContextMenu?: boolean;
     reorderStateKey?: string;
     sortFunction?: (tabs: string[]) => string[];
     canClose?: (tab: ITabData<T>) => boolean;
@@ -53,9 +55,9 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
   children,
   lazy = false,
   autoSelect = true,
-  manual,
   tabList,
   enabledBaseActions,
+  enabledContextMenu = false,
   reorderStateKey,
   sortFunction,
   onChange: onOpen,
@@ -66,6 +68,8 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
 }: TabsStateProps<T>): React.ReactElement | null {
   const context = useDataContext();
   const props = useMemo(() => rest as any as T, [...Object.values(rest)]);
+
+  const controlled = currentTabId !== undefined;
 
   let displayed: string[] = [];
 
@@ -86,15 +90,26 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
   const [closeExecutor] = useState(() => new Executor<ITabData<T>>());
   const [openExecutor] = useState(() => new Executor<ITabData<T>>());
 
-  const state = useTabState({
-    selectedId: selectedId || currentTabId || null,
+  function select(id: string | null | undefined): void | undefined {
+    if (isNotNullDefined(id) && id !== currentTabId) {
+      openExecutor.execute({ tabId: id, props });
+    }
+  }
+
+  const store = useTabStore({
+    defaultSelectedId: selectedId ?? null,
     orientation,
-    manual,
+    selectOnMove: false,
+    focusLoop: false,
+    selectedId: controlled ? currentTabId : undefined,
+    setSelectedId: controlled ? select : undefined,
   });
+
+  const selected = useStoreState(store, 'selectedId');
 
   const dynamic = useObjectRef(
     () => ({
-      selectedId: state.selectedId,
+      selectedId: selected,
     }),
     {
       canClose,
@@ -104,41 +119,48 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       props,
       tabsState,
       container,
-      state,
+      selected,
+      store,
       tabList,
+      controlled,
     },
   );
 
-  if (isNotNullDefined(currentTabId)) {
-    state.selectedId = currentTabId;
-  }
-
-  if (displayed.length > 0 && autoSelect) {
-    const tabExists = isNotNullDefined(state.selectedId) && displayed.includes(state.selectedId);
-
-    if (!tabExists) {
-      state.selectedId = displayed[0];
+  useEffect(() => {
+    if (isNotNullDefined(currentTabId)) {
+      dynamic.selectedId = currentTabId;
     }
-  }
+  }, [currentTabId]);
 
-  if (isNotNullDefined(currentTabId)) {
-    dynamic.selectedId = state.selectedId;
-  }
+  useEffect(() => {
+    if (displayed.length > 0 && autoSelect) {
+      const selectedId = dynamic.store.getState().selectedId;
+      const tabExists = isNotNullDefined(selectedId) && displayed.includes(selectedId);
+
+      if (!tabExists) {
+        dynamic.store.setSelectedId(displayed[0]);
+      }
+    }
+  }, [displayed, autoSelect]);
 
   useExecutor({
     executor: openExecutor,
     handlers: [
       function openHandler(data, contexts) {
-        dynamic.open?.(data);
         if (dynamic.selectedId === data.tabId) {
           ExecutorInterrupter.interrupt(contexts);
           return;
         }
-        dynamic.selectedId = data.tabId;
-        if (dynamic.state.selectedId !== data.tabId) {
-          dynamic.state.setCurrentId(data.tabId);
-          dynamic.state.setSelectedId(data.tabId);
+
+        if (!dynamic.controlled) {
+          dynamic.selectedId = data.tabId;
+
+          if (dynamic.store.getState().selectedId !== data.tabId) {
+            dynamic.store.setSelectedId(data.tabId);
+          }
         }
+
+        dynamic.open?.(data);
       },
     ],
   });
@@ -152,9 +174,13 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
     ],
   });
 
-  const currentSelectedId = state.selectedId;
+  const currentSelectedId = selected;
 
   useEffect(() => {
+    if (controlled) {
+      return;
+    }
+
     if (!isNotNullDefined(currentSelectedId) || dynamic.selectedId === currentSelectedId) {
       return;
     }
@@ -163,7 +189,7 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       tabId: currentSelectedId,
       props,
     });
-  }, [currentSelectedId]);
+  }, [currentSelectedId, controlled]);
 
   const value = useObservableRef<ITabsContext<T>>(
     () => ({
@@ -241,7 +267,6 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       sortFunction,
     }),
     {
-      state: observable.ref,
       tabsState: observable.ref,
       props: observable.ref,
       container: observable.ref,
@@ -251,6 +276,7 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       closable: observable.ref,
       tabList: observable.ref,
       enabledBaseActions: observable.ref,
+      enabledContextMenu: observable.ref,
       reorderStateKey: observable.ref,
       sortFunction: observable.ref,
       getTabInfo: action.bound,
@@ -264,7 +290,6 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       reorder: action.bound,
     },
     {
-      state,
       tabsState,
       props,
       container,
@@ -274,15 +299,17 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       closable,
       tabList,
       enabledBaseActions,
+      enabledContextMenu,
       reorderStateKey,
       sortFunction,
     },
   );
 
   let currentTabInfo: ITabInfo<T, unknown> | undefined;
+
   if (container) {
-    if (state.selectedId) {
-      currentTabInfo = value.getTabInfo(state.selectedId);
+    if (selected) {
+      currentTabInfo = value.getTabInfo(selected);
     }
   }
 
@@ -303,8 +330,10 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
   );
 
   return (
-    <TabsContext.Provider value={value}>
-      <TabsValidationProvider>{children}</TabsValidationProvider>
-    </TabsContext.Provider>
+    <TabProvider store={store}>
+      <TabsContext.Provider value={value}>
+        <TabsValidationProvider>{children}</TabsValidationProvider>
+      </TabsContext.Provider>
+    </TabProvider>
   );
 });

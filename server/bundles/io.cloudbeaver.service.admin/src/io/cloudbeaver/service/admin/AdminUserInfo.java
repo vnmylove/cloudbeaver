@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,14 @@ import io.cloudbeaver.model.user.WebUserOriginInfo;
 import io.cloudbeaver.registry.WebAuthProviderDescriptor;
 import io.cloudbeaver.registry.WebAuthProviderRegistry;
 import io.cloudbeaver.utils.CBModelConstants;
+import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.auth.SMObjectType;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.security.SMDataSourceGrant;
-import org.jkiss.dbeaver.model.security.SMObjectType;
+import org.jkiss.dbeaver.model.security.user.SMUserTeam;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,12 +45,23 @@ public class AdminUserInfo {
 
     private final WebSession session;
     private final WebUser user;
+    @Nullable
+    private final SMUserTeam[] grantedTeamsInfo;
     private String[] userLinkedProviders;
 
 
-    public AdminUserInfo(WebSession session, WebUser user) {
+    public AdminUserInfo(@NotNull WebSession session, @NotNull WebUser user) {
+        this(session, user, null);
+    }
+
+    public AdminUserInfo(
+        @NotNull WebSession session,
+        @NotNull WebUser user,
+        @Nullable SMUserTeam[] grantedTeamsInfo
+    ) {
         this.session = session;
         this.user = user;
+        this.grantedTeamsInfo = grantedTeamsInfo;
     }
 
     @Property
@@ -82,6 +95,16 @@ public class AdminUserInfo {
     }
 
     @Property
+    @NotNull
+    public SMUserTeam[] getGrantedTeamsInfo() throws DBException {
+        if (grantedTeamsInfo != null) {
+            return grantedTeamsInfo;
+        }
+        return session.getAdminSecurityController().getUserTeams(getUserId());
+    }
+
+    @Property
+    @NotNull
     public SMDataSourceGrant[] getGrantedConnections() throws DBException {
         return session.getAdminSecurityController()
             .getSubjectObjectPermissionGrants(getUserId(), SMObjectType.datasource)
@@ -141,5 +164,10 @@ public class AdminUserInfo {
     @Nullable
     public String getDisableReason() {
         return user.getDisableReason();
+    }
+
+    @Nullable
+    public String getLastLoginTime() {
+        return user.getLastLoginTime() == null ? null : CBModelConstants.ISO_DATE_FORMAT.format(user.getLastLoginTime());
     }
 }

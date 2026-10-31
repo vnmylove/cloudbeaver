@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ export * from './DragAndDrop/DNDPreviewLoader.js';
 export * from './DragAndDrop/DNDProviderLoader.js';
 export * from './DragAndDrop/useDNDBox.js';
 export * from './DragAndDrop/useDNDData.js';
+export * from './DragAndDrop/DNDScrollContainerLoader.js';
 
 export * from './Form/Components/IBaseFormProps.js';
 export * from './Form/Components/BaseFormLazy.js';
@@ -64,6 +65,9 @@ export * from './Tabs/useTabState.js';
 export * from './Tabs/useTabLocalState.js';
 export * from './Tabs/useTabOrderPersistence.js';
 export * from './Tabs/useTabPersistence.js';
+export * from './Tabs/useTabsStore.js';
+export * from './Tabs/useTabsState.js';
+export * from './Tabs/VerticalTabsStyleRegistry.js';
 export { default as TabStyles } from './Tabs/Tab/Tab.module.css';
 export { default as TabTitleStyles } from './Tabs/Tab/TabTitle.module.css';
 export { default as TabVerticalRotatedStyles } from './Tabs/Tab/TabVerticalRotated.module.css';
@@ -90,8 +94,6 @@ export * from './Tabs/Tab/TabProps.js';
 export * from './Tabs/Tab/TabTitleLoader.js';
 export * from './Tabs/Tab/useTab.js';
 export * from './Tabs/TabsBootstrap.js';
-
-export * from './Tabs/TabsBox/TabsBoxLoader.js';
 
 export * from './SideBarPanel/LeftBarPanelService.js';
 export * from './SideBarPanel/SideBarPanelLoader.js';

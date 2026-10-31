@@ -1,13 +1,13 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { schema } from '@cloudbeaver/core-utils';
 
-const ServerConfigurationFormPartStateConfigSchema = schema.object({
+const ServerConfigurationFormPartStateConfigSchema = schema.looseObject({
   adminCredentialsSaveEnabled: schema.boolean().optional(),
   adminName: schema.string().trim().optional(),
   adminPassword: schema.string().trim().optional(),
@@ -19,10 +19,10 @@ const ServerConfigurationFormPartStateConfigSchema = schema.object({
   enabledAuthProviders: schema.array(schema.string()).optional(),
   enabledFeatures: schema.array(schema.string()).optional(),
   publicCredentialsSaveEnabled: schema.boolean().optional(),
+  dbUserPasswordChangeEnabled: schema.boolean().optional(),
   resourceManagerEnabled: schema.boolean().optional(),
   secretManagerEnabled: schema.boolean().optional(),
   serverName: schema.string().trim().optional(),
-  serverURL: schema.string().trim().optional(),
   sessionExpireTime: schema.number().optional(),
   forceHttps: schema.boolean().optional(),
   supportedHosts: schema.string(),

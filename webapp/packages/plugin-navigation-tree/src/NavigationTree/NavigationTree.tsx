@@ -13,6 +13,7 @@ import { useService } from '@cloudbeaver/core-di';
 import { NavNodeInfoResource, NavTreeResource, ProjectsNavNodeService, ROOT_NODE_PATH } from '@cloudbeaver/core-navigation-tree';
 import { ProjectsService } from '@cloudbeaver/core-projects';
 import { CaptureView } from '@cloudbeaver/core-view';
+import { useConnectionTypeLoader } from '@cloudbeaver/core-connections';
 
 import { ElementsTreeToolsStyles } from '../index.js';
 import { NavNodeViewService } from '../NodesManager/NavNodeView/NavNodeViewService.js';
@@ -56,10 +57,12 @@ export const NavigationTree = observer(function NavigationTree() {
   const styles = useS(style);
   const projectsNavNodeService = useService(ProjectsNavNodeService);
   const projectsService = useService(ProjectsService);
-  const navTreeService = useService(NavigationTreeService);
+  const navigationTreeService = useService(NavigationTreeService);
   const navNodeInfoResource = useService(NavNodeInfoResource);
   const navTreeResource = useService(NavTreeResource);
   const navNodeViewService = useService(NavNodeViewService);
+
+  useConnectionTypeLoader();
 
   const root = ROOT_NODE_PATH;
   const { handleOpen, handleSelect, handleSelectReset } = useNavigationTree();
@@ -93,7 +96,7 @@ export const NavigationTree = observer(function NavigationTree() {
   );
 
   useExecutor({
-    executor: navTreeService.showNodeExecutor,
+    executor: navigationTreeService.showNodeExecutor,
     handlers: [
       function showNode(data) {
         if (tree.current) {
@@ -105,11 +108,11 @@ export const NavigationTree = observer(function NavigationTree() {
 
   return (
     <SContext registry={registry}>
-      <CaptureView view={navTreeService} className={s(styles, { captureView: true })}>
+      <CaptureView view={navigationTreeService} className={s(styles, { captureView: true })}>
         <ElementsTree
           ref={tree}
           root={root}
-          localState={navTreeService.treeState}
+          localState={navigationTreeService.treeState}
           filters={[duplicateFilter, connectionGroupFilter, projectFilter]}
           renderers={[projectsRendererRenderer, navigationTreeConnectionGroupRenderer, connectionRenderer]}
           navNodeFilterCompare={navigationTreeProjectSearchCompare}
@@ -127,8 +130,8 @@ export const NavigationTree = observer(function NavigationTree() {
           customSelect={handleSelect}
           customSelectReset={handleSelectReset}
           settings={settings}
-          getChildren={navTreeService.getChildren}
-          loadChildren={navTreeService.loadNestedNodes}
+          getChildren={navigationTreeService.getChildren}
+          loadChildren={navigationTreeService.loadNestedNodes}
           onOpen={handleOpen}
         />
       </CaptureView>

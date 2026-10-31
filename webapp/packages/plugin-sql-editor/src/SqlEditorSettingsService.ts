@@ -14,11 +14,9 @@ import {
   SettingsTransformationService,
 } from '@cloudbeaver/core-root';
 import {
-  createSettingsAliasResolver,
   createSettingsOverrideResolver,
   ESettingsValueType,
   type ISettingDescription,
-  ROOT_SETTINGS_LAYER,
   SettingsManagerService,
   SettingsProvider,
   SettingsProviderService,
@@ -30,6 +28,13 @@ import { SQL_EDITOR_SETTINGS_GROUP } from './SQL_EDITOR_SETTINGS_GROUP.js';
 
 const TABLE_ALIAS_OPTIONS = ['NONE', 'PLAIN', 'EXTENDED'] as const;
 const ASSISTANT_MODE_OPTIONS = ['DEFAULT', 'NEW', 'COMBINE'] as const;
+const BLANK_LINE_DELIMITER_OPTIONS = ['BLANK_LINE_AND_SEPARATOR', 'ONLY_SEPARATOR', 'SMART'] as const;
+
+const BLANK_LINE_DELIMITER_OPTIONS_LOCALIZED = [
+  { value: 'BLANK_LINE_AND_SEPARATOR', name: 'sql_editor_settings_blank_line_delimiter_always' },
+  { value: 'ONLY_SEPARATOR', name: 'sql_editor_settings_blank_line_delimiter_never' },
+  { value: 'SMART', name: 'sql_editor_settings_blank_line_delimiter_smart' },
+];
 
 const TABLE_ALIAS_SETTING_OPTIONS = [
   {
@@ -59,6 +64,7 @@ const defaultSettings = schema.object({
   'plugin.sql-editor.highlightWhitespace': schemaExtra.stringedBoolean().default(false),
   'sql.parameter.enabled': schemaExtra.stringedBoolean().default(true),
   'sql.variables.enabled': schemaExtra.stringedBoolean().default(true),
+  'script.sql.delimiter.blank': schema.enum(BLANK_LINE_DELIMITER_OPTIONS).default('BLANK_LINE_AND_SEPARATOR'),
   'sql.proposals.insert.table.alias': schema.coerce
     .string()
     .transform(value => {
@@ -123,6 +129,10 @@ export class SqlEditorSettingsService {
     return this.settings.getValue('sql.parameter.enabled');
   }
 
+  get blankLineDelimiter(): SqlEditorSettings['script.sql.delimiter.blank'] {
+    return this.settings.getValue('script.sql.delimiter.blank');
+  }
+
   get variablesEnabled(): boolean {
     return this.settings.getValue('sql.variables.enabled');
   }
@@ -147,15 +157,6 @@ export class SqlEditorSettingsService {
   ) {
     this.settings = this.settingsProviderService.createSettings(defaultSettings);
     this.settingsResolverService.addResolver(
-      ROOT_SETTINGS_LAYER,
-      /** @deprecated Use settings instead, will be removed in 23.0.0 */
-      createSettingsAliasResolver<SqlEditorSettingsSchema>(this.settingsProviderService.settingsResolver, {
-        'plugin.sql-editor.autoSave': 'core.app.sqlEditor.autoSave',
-        'plugin.sql-editor.maxFileSize': 'core.app.sqlEditor.maxFileSize',
-        'plugin.sql-editor.disabled': 'core.app.sqlEditor.disabled',
-      }),
-    );
-    this.settingsResolverService.addResolver(
       HIGHEST_SETTINGS_LAYER,
       createSettingsOverrideResolver<SqlEditorSettingsSchema>(this.settingsProviderService.settingsResolver, {
         'plugin.sql-editor.script.executionEnabled': {
@@ -169,6 +170,14 @@ export class SqlEditorSettingsService {
 
   private registerSettings() {
     this.settingsTransformationService.setGroupOverride('editors/sqlEditor', SQL_EDITOR_SETTINGS_GROUP);
+    this.settingsTransformationService.setSettingTransformer('script.sql.delimiter.blank', setting => ({
+      ...setting,
+      group: SQL_EDITOR_SETTINGS_GROUP,
+      type: ESettingsValueType.Select,
+      name: 'sql_editor_settings_blank_line_delimiter_name',
+      description: 'sql_editor_settings_blank_line_delimiter_desc',
+      options: BLANK_LINE_DELIMITER_OPTIONS_LOCALIZED,
+    }));
     this.settingsTransformationService.setSettingTransformer(
       'sql.proposals.insert.table.alias',
       setting =>
@@ -238,6 +247,19 @@ export class SqlEditorSettingsService {
         },
       ];
 
+      if (!this.serverSettingsManagerService.providedSettings.has('script.sql.delimiter.blank')) {
+        settings.push({
+          key: 'script.sql.delimiter.blank',
+          access: {
+            scope: ['server', 'client'],
+          },
+          group: SQL_EDITOR_SETTINGS_GROUP,
+          type: ESettingsValueType.Select,
+          name: 'sql_editor_settings_blank_line_delimiter_name',
+          description: 'sql_editor_settings_blank_line_delimiter_desc',
+          options: BLANK_LINE_DELIMITER_OPTIONS_LOCALIZED,
+        });
+      }
       if (!this.serverSettingsManagerService.providedSettings.has('sql.proposals.insert.table.alias')) {
         settings.push({
           key: 'sql.proposals.insert.table.alias',

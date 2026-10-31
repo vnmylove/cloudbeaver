@@ -19,6 +19,7 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
   state: TPartState;
   initialState: TPartState;
   isSaving: boolean;
+  isReadOnly: boolean;
 
   exception: Error | null;
   promise: Promise<any> | null;
@@ -35,6 +36,7 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
     this.initialState = initialState;
     this.state = toJS(this.initialState);
     this.isSaving = false;
+    this.isReadOnly = false;
 
     this.exception = null;
     this.promise = null;
@@ -44,6 +46,7 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
     this.schema = schema;
 
     this.formState.submitTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.save.bind(this)));
+    this.formState.prepareTask.addHandler(executorHandlerFilter(() => this.isLoaded() && this.isChanged, this.prepare.bind(this)));
     this.formState.formatTask.addHandler(executorHandlerFilter(() => this.isLoaded() && this.isChanged, this.format.bind(this)));
     this.formState.validationTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.handleValidation.bind(this)));
 
@@ -54,6 +57,7 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
       exception: observable.ref,
       promise: observable.ref,
       isSaving: observable.ref,
+      isReadOnly: observable.ref,
       loaded: observable,
       loading: observable,
       setInitialState: action,
@@ -73,6 +77,10 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
 
   isOutdated(): boolean {
     return false;
+  }
+
+  isLoadable(): boolean {
+    return !this.formState.savingPromise;
   }
 
   isLoaded(): boolean {
@@ -125,7 +133,7 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
   }
 
   async load(): Promise<void> {
-    if (this.formState.savingPromise) {
+    if (!this.isLoadable()) {
       return;
     }
 
@@ -196,10 +204,11 @@ export abstract class FormPart<TPartState extends object, TFormState = any> impl
     this.state = state;
   }
 
+  protected prepare(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): void | Promise<void> {}
   protected format(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): void | Promise<void> {}
   protected validate(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): void | Promise<void> {}
 
   protected abstract loader(): Promise<void>;
-  protected abstract saveChanges(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): Promise<void>;
+  protected abstract saveChanges(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): void | Promise<void>;
   dispose(): void | Promise<void> {}
 }

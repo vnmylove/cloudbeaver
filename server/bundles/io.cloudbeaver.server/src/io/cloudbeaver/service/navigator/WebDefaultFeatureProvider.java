@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -97,7 +97,8 @@ public class WebDefaultFeatureProvider implements DBWFeatureProvider {
             } else {
                 features.add(NODE_FEATURE_CAN_FILTER);
             }
-            isShared = !node.getOwnerProject().getName().equals(webSession.getUserId());
+            DBPProject nodeProject = node.getOwnerProjectOrNull();
+            isShared = nodeProject != null && !nodeProject.getName().equals(webSession.getUserId());
         } else if (node instanceof DBNLocalFolder dbnLocalFolder) {
             DBPDataSourceFolder folder = dbnLocalFolder.getFolder();
             DBPProject project = folder.getDataSourceRegistry().getProject();
@@ -145,11 +146,6 @@ public class WebDefaultFeatureProvider implements DBWFeatureProvider {
         return features;
     }
 
-    @NotNull
-    private String getProjectId(@NotNull DBNNode node) {
-        return node.getOwnerProject().getId();
-    }
-
     private boolean canCreateConnectionFromFileName(String fileName) {
         String fileExtension = IOUtils.getFileExtension(fileName);
         if (CommonUtils.isEmpty(fileExtension)) {
@@ -169,11 +165,20 @@ public class WebDefaultFeatureProvider implements DBWFeatureProvider {
     }
 
     private boolean hasNodePermission(@NotNull WebSession webSession, @NotNull DBNNode node, @NotNull RMProjectPermission permission) {
-        WebProjectImpl project = webSession.getProjectById(node.getOwnerProject().getId());
-        if (project == null) {
-            return false;
+        RMProject rmProject;
+        if (node instanceof DBNResourceManagerResource rmr) {
+            rmProject = rmr.getRmProject();
+        } else {
+            DBPProject nodeProject = node.getOwnerProjectOrNull();
+            if (nodeProject == null) {
+                return false;
+            }
+            WebProjectImpl project = webSession.getProjectById(nodeProject.getId());
+            if (project == null) {
+                return false;
+            }
+            rmProject = project.getRMProject();
         }
-        RMProject rmProject = project.getRMProject();
         return SMUtils.hasProjectPermission(webSession, rmProject, permission);
     }
 

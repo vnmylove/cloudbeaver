@@ -5,7 +5,6 @@
     "./lib/module.js",
     "./lib/index.js",
     "src/**/*.css",
-    "src/**/*.scss",
     "public/**/*"
   ],
   "version": "0.1.0",
@@ -13,7 +12,8 @@
   "license": "Apache-2.0",
   "exports": {
     ".": "./lib/index.js",
-    "./module": "./lib/module.js"
+    "./module": "./lib/module.js",
+    "./*.css": "./src/*.css"
   },
   "scripts": {
     "build": "tsc -b",
@@ -42,10 +42,8 @@
     "mobx-react-lite": "^4",
     "react": "^19",
     "react-dom": "^19",
-    "react-hotkeys-hook": "5.1.0",
+    "react-hotkeys-hook": "^5",
     "react-minisearch": "^7",
-    "reakit": "^1",
-    "reakit-utils": "^0",
     "subscript": "^9",
     "tslib": "^2"
   },
@@ -59,7 +57,8 @@
     "@cloudbeaver/tsconfig": "workspace:*",
     "@dbeaver/cli": "workspace:*",
     "@dbeaver/react-tests": "workspace:*",
-    "@testing-library/jest-dom": "^6",
+    "@testing-library/dom": "^10",
+    "@testing-library/jest-dom": "^7",
     "@testing-library/react": "^16",
     "@testing-library/user-event": "^14",
     "@types/react": "^19",

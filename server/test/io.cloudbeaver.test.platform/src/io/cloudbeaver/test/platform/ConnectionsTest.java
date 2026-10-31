@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,13 @@ package io.cloudbeaver.test.platform;
 import io.cloudbeaver.CloudbeaverMockTest;
 import io.cloudbeaver.app.CEAppStarter;
 import io.cloudbeaver.test.WebGQLClient;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.utils.GeneralUtils;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -37,12 +38,21 @@ public class ConnectionsTest extends CloudbeaverMockTest {
         query userConnections {
           result: userConnections {
             id
+            nodePath
           }
         }""";
     private static final String GQL_CONNECTIONS_CREATE = """
         mutation createConnection($config: ConnectionConfig!, $projectId: ID) {
           result: createConnection(config: $config, projectId: $projectId) {
             id
+            nodePath
+          }
+        }""";
+    private static final String GQL_COPY_CONNECTION_FROM_NODE = """
+        mutation copyConnectionFromNode($nodePath: String!, $config: ConnectionConfig, $projectId: ID) {
+          result: copyConnectionFromNode(nodePath: $nodePath, config: $config, projectId: $projectId) {
+            id
+            nodePath
           }
         }""";
     private static final String GQL_CONNECTIONS_DELETE = """
@@ -56,7 +66,7 @@ public class ConnectionsTest extends CloudbeaverMockTest {
             System.out.println("APP:: " + GeneralUtils.getProductTitle());
             //CBPlatform.setApplication(testApp);
 
-            Path defaultWorkingFolder = DBWorkbench.getPlatform().getApplication().getDefaultWorkingFolder();
+            Path defaultWorkingFolder = DBWorkbench.getPlatform().getApplication().getWorkspacePath();
             System.out.println("DBeaver application: " + defaultWorkingFolder);
 
         } catch (Exception e) {
@@ -72,28 +82,55 @@ public class ConnectionsTest extends CloudbeaverMockTest {
         Map<String, Object> configuration = new LinkedHashMap<>();
         Map<String, Object> variables = new LinkedHashMap<>();
         variables.put("config", configuration);
-        Assert.assertThrows(
-            "Template connection or driver must be specified",
+        Assertions.assertThrows(
             DBException.class,
-            () -> client.sendQuery(GQL_CONNECTIONS_CREATE, variables)
+            () -> client.sendQuery(GQL_CONNECTIONS_CREATE, variables),
+            "Template connection or driver must be specified"
         );
         String templateId = "test_template";
         configuration.put("templateId", templateId);
-        Assert.assertThrows(
-            "Template connection '" + templateId + "' not found",
+        Assertions.assertThrows(
             DBException.class,
-            () -> client.sendQuery(GQL_CONNECTIONS_CREATE, variables)
+            () -> client.sendQuery(GQL_CONNECTIONS_CREATE, variables),
+            "Template connection '" + templateId + "' not found"
         );
 
         configuration.remove("templateId");
         configuration.put("driverId", "postgresql:postgres-jdbc");
 
         Map<String, Object> addedConnection = client.sendQuery(GQL_CONNECTIONS_CREATE, variables);
+        Assertions.assertNotNull(addedConnection);
+        checkAddedConnection(client, addedConnection);
 
+        String addedConnectionId = JSONUtils.getString(addedConnection, "id");
+        String nodePath = JSONUtils.getString(addedConnection, "nodePath");
+
+        Map<String, Object> config1 = Map.of("name", "connection copy");
+        Map<String, Object> variables1 = new LinkedHashMap<>();
+        variables1.put("projectId", "g_GlobalConfiguration");
+        variables1.put("config", config1);
+        variables1.put("nodePath", nodePath);
+
+        Assertions.assertThrows(
+            DBException.class,
+            () -> client.sendQuery(GQL_COPY_CONNECTION_FROM_NODE, variables1)
+        );
+        variables1.put("projectId", "u_test");
+        Map<String, Object> copiedConnection = client.sendQuery(GQL_COPY_CONNECTION_FROM_NODE, variables1);
+        Assertions.assertNotNull(copiedConnection);
+        checkAddedConnection(client, copiedConnection);
+        String copiedConnectionId = JSONUtils.getString(copiedConnection, "id");
+        Boolean deleted1 = client.sendQuery(GQL_CONNECTIONS_DELETE, Map.of("id", addedConnectionId));
+        Assertions.assertTrue(deleted1);
+        Boolean deleted2 = client.sendQuery(GQL_CONNECTIONS_DELETE, Map.of("id", copiedConnectionId));
+        Assertions.assertTrue(deleted2);
+    }
+
+    private void checkAddedConnection(@NotNull WebGQLClient client, @NotNull Map<String, Object> addedConnection) throws Exception {
         List<Map<String, Object>> connections = client.sendQuery(GQL_CONNECTIONS_GET, null);
-        Assert.assertTrue(connections.contains(addedConnection));
-        String connectionId = JSONUtils.getString(addedConnection, "id");
-        Assert.assertNotNull(connectionId);
-        Assert.assertTrue(client.sendQuery(GQL_CONNECTIONS_DELETE, Map.of("id", connectionId)));
+        Assertions.assertTrue(connections.contains(addedConnection));
+        Assertions.assertNotNull(JSONUtils.getString(addedConnection, "id"));
+        String nodePath = JSONUtils.getString(addedConnection, "nodePath");
+        Assertions.assertNotNull(nodePath);
     }
 }

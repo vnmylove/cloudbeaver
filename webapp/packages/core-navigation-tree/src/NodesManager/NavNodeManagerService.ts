@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ export class NavNodeManagerService extends Bootstrap {
   private readonly syncNodeInfoCache: MetadataMap<string, INavNodeCache>;
 
   constructor(
-    readonly navTree: NavTreeResource,
+    readonly navTreeResource: NavTreeResource,
     readonly navNodeInfoResource: NavNodeInfoResource,
     private readonly projectsNavNodeService: ProjectsNavNodeService,
     navigationService: NavigationService,
@@ -158,7 +158,7 @@ export class NavNodeManagerService extends Bootstrap {
 
     const move = contexts.getContext(navNodeMoveContext);
 
-    const cache = this.syncNodeInfoCache.get(targetNode.id);
+    const cache = this.syncNodeInfoCache.get(targetNode.uri);
     cache.canMove = move.canMove;
 
     return move.canMove;
@@ -192,11 +192,11 @@ export class NavNodeManagerService extends Bootstrap {
   }
 
   async refreshTree(navNodeId: string): Promise<void> {
-    await this.navTree.refreshTree(navNodeId);
+    await this.navTreeResource.refreshTree(navNodeId);
   }
 
   async refreshNode(navNodeId: string): Promise<void> {
-    await this.navTree.refreshNode(navNodeId);
+    await this.navTreeResource.refreshNode(navNodeId);
   }
 
   getTree(navNodeId: string): string[] | undefined;
@@ -204,22 +204,22 @@ export class NavNodeManagerService extends Bootstrap {
   getTree(navNodeKey: NavNodeKey[]): Array<string[] | undefined>;
   getTree(navNodeId: string | NavNodeKey | NavNodeKey[]): string[] | undefined | Array<string[] | undefined> {
     if (typeof navNodeId === 'string') {
-      return this.navTree.get(navNodeId);
+      return this.navTreeResource.get(navNodeId);
     }
 
     if (Array.isArray(navNodeId)) {
-      return navNodeId.map(node => this.navTree.data.get(node.nodeId));
+      return navNodeId.map(node => this.navTreeResource.data.get(node.nodeId));
     }
 
-    return this.navTree.get(navNodeId.nodeId);
+    return this.navTreeResource.get(navNodeId.nodeId);
   }
 
   loadTree(navNodeId: string): Promise<string[]> {
-    return this.navTree.load(navNodeId);
+    return this.navTreeResource.load(navNodeId);
   }
 
   removeTree(path = ROOT_NODE_PATH): void {
-    this.navTree.delete(path);
+    this.navTreeResource.delete(path);
   }
 
   getNode(navNodeId: string): NavNode | undefined;
@@ -303,7 +303,7 @@ export class NavNodeManagerService extends Bootstrap {
         res.projectId = object.projectId;
       }
       if (object.objectFeatures.includes(EObjectFeature.dataSource)) {
-        res.connectionNodeId = object.id;
+        res.connectionNodeId = object.uri;
       }
       if (object.objectFeatures.includes(EObjectFeature.catalog)) {
         res.catalogId = object.name; // note that catalogId is node name
@@ -343,7 +343,7 @@ export class NavNodeManagerService extends Bootstrap {
           const parent = this.getParent(node);
           folderId = nodeId;
           if (parent && !parent.folder) {
-            nodeId = parent.id;
+            nodeId = parent.uri;
             parentId = parent.parentId;
             name = parent.name;
             icon = parent.icon;
@@ -373,7 +373,7 @@ export class NavNodeManagerService extends Bootstrap {
 
       for (const node of nodes) {
         node.parentId = parentId;
-        parentId = node.id;
+        parentId = node.uri;
       }
     };
 

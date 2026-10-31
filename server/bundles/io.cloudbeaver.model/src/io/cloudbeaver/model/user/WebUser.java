@@ -56,6 +56,10 @@ public class WebUser {
         return user.isEnabled();
     }
 
+    public boolean isSecretStorage() {
+        return user.isSecretStorage();
+    }
+
     public void setEnabled(boolean enabled) {
         user.enableUser(enabled);
     }
@@ -113,5 +117,10 @@ public class WebUser {
     @Nullable
     public String getDisableReason() {
         return user.getDisableReason();
+    }
+
+    @Nullable
+    public Instant getLastLoginTime() {
+        return user.getLastLoginTime();
     }
 }

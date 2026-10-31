@@ -16,10 +16,10 @@
  */
 package io.cloudbeaver.test.platform;
 
-import io.cloudbeaver.service.teleport.auth.EcSignatureConverter;
+import io.cloudbeaver.service.auth.teleport.EcSignatureConverter;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
@@ -42,13 +42,13 @@ public class EcSignatureConverterTest {
         byte[] der = signer.sign();
 
         byte[] raw = EcSignatureConverter.convertDerToJwsEcSignature(der);
-        Assert.assertEquals(64, raw.length);
+        Assertions.assertEquals(64, raw.length);
         byte[] converted = EcSignatureConverter.convertJwsEcSignatureToDer(raw);
 
         Signature verifier = Signature.getInstance("SHA256withECDSA");
         verifier.initVerify(keyPair.getPublic());
         verifier.update(message);
-        Assert.assertTrue(verifier.verify(converted));
+        Assertions.assertTrue(verifier.verify(converted));
     }
 
     @Test
@@ -59,10 +59,10 @@ public class EcSignatureConverterTest {
         raw[32] = 0x01;
 
         byte[] der = EcSignatureConverter.convertJwsEcSignatureToDer(raw);
-        Assert.assertEquals(0x02, der[2]);
-        Assert.assertEquals(33, der[3]);
-        Assert.assertEquals(0x00, der[4]);
-        Assert.assertEquals((byte) 0x80, der[5]);
+        Assertions.assertEquals(0x02, der[2]);
+        Assertions.assertEquals(33, der[3]);
+        Assertions.assertEquals(0x00, der[4]);
+        Assertions.assertEquals((byte) 0x80, der[5]);
     }
 
     @Test
@@ -72,14 +72,14 @@ public class EcSignatureConverterTest {
         raw[31] = 0x05;
 
         byte[] der = EcSignatureConverter.convertJwsEcSignatureToDer(raw);
-        Assert.assertEquals(0x02, der[2]);
-        Assert.assertEquals(1, der[3] & 0xff);
-        Assert.assertEquals(0x05, der[4]);
+        Assertions.assertEquals(0x02, der[2]);
+        Assertions.assertEquals(1, der[3] & 0xff);
+        Assertions.assertEquals(0x05, der[4]);
     }
 
     @Test
     public void rejectsUnexpectedLength() {
-        Assert.assertThrows(
+        Assertions.assertThrows(
             IllegalArgumentException.class,
             () -> EcSignatureConverter.convertJwsEcSignatureToDer(new byte[63]));
     }
@@ -99,7 +99,7 @@ public class EcSignatureConverterTest {
             byte[] raw = EcSignatureConverter.convertDerToJwsEcSignature(signer.sign());
             byte[] restored = EcSignatureConverter.convertDerToJwsEcSignature(
                 EcSignatureConverter.convertJwsEcSignatureToDer(raw));
-            Assert.assertTrue(Arrays.equals(raw, restored));
+            Assertions.assertTrue(Arrays.equals(raw, restored));
         }
     }
 }

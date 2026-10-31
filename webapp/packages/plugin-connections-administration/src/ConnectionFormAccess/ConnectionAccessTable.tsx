@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,18 +10,35 @@ import { observer } from 'mobx-react-lite';
 
 import { Alert, StaticImage, useAutoLoad, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { useTab, type TabContainerPanelComponent } from '@cloudbeaver/core-ui';
-import { getConnectionFormOptionsPart, type IConnectionFormProps } from '@cloudbeaver/plugin-connections';
+import { ConnectionSectionWrapper, getConnectionFormOptionsPart, type IConnectionFormProps } from '@cloudbeaver/plugin-connections';
 import { CachedMapAllKey, CachedResourceOffsetPageListKey } from '@cloudbeaver/core-resource';
-import { TeamsResource, UsersResource, UsersResourceFilterKey, type AdminUser, type TeamInfo } from '@cloudbeaver/core-authentication';
+import {
+  compareGrantSubjectsByLastLogin,
+  compareGrantSubjectsByName,
+  TeamsResource,
+  UsersResource,
+  UsersResourceFilterKey,
+  type AdminUser,
+  type TeamInfo,
+} from '@cloudbeaver/core-authentication';
 import { ConnectionInfoOriginResource, ConnectionInfoResource, createConnectionParam, isCloudConnection } from '@cloudbeaver/core-connections';
 import { GrantManagementTable, type IGrantManagementTableColumn } from '@cloudbeaver/plugin-data-grid';
 
 import { getConnectionFormAccessPart } from './getConnectionFormAccessPart.js';
 
-const NAME_COLUMN: IGrantManagementTableColumn = { key: 'name', label: 'connections_connection_access_user_or_team_name' };
-const DESCRIPTION_COLUMN: IGrantManagementTableColumn = { key: 'description', label: 'connections_connection_description' };
+const NAME_COLUMN: IGrantManagementTableColumn<AdminUser | TeamInfo> = {
+  key: 'name',
+  label: 'connections_connection_access_user_or_team_name',
+  compare: compareGrantSubjectsByName,
+};
+const DESCRIPTION_COLUMN: IGrantManagementTableColumn<AdminUser | TeamInfo> = { key: 'description', label: 'connections_connection_description' };
+const LAST_LOGIN_COLUMN: IGrantManagementTableColumn<AdminUser | TeamInfo> = {
+  key: 'lastLogin',
+  label: 'plugin_connections_administration_user_last_login',
+  compare: compareGrantSubjectsByLastLogin,
+};
 
-const COLUMNS: IGrantManagementTableColumn[] = [NAME_COLUMN, DESCRIPTION_COLUMN];
+const COLUMNS: IGrantManagementTableColumn<AdminUser | TeamInfo>[] = [NAME_COLUMN, DESCRIPTION_COLUMN, LAST_LOGIN_COLUMN];
 
 export const ConnectionAccessTable: TabContainerPanelComponent<IConnectionFormProps> = observer(function ConnectionAccessTable({ tabId, formState }) {
   const translate = useTranslate();
@@ -56,7 +73,13 @@ export const ConnectionAccessTable: TabContainerPanelComponent<IConnectionFormPr
   const cloud = connectionInfo && originInfo?.origin ? isCloudConnection(originInfo.origin) : false;
 
   if (cloud) {
-    return <Alert className="tw:h-max tw:m-4">{translate('cloud_connections_access_placeholder')}</Alert>;
+    return (
+      <div className="tw:flex tw:flex-1 tw:overflow-auto">
+        <ConnectionSectionWrapper>
+          <Alert className="tw:h-max">{translate('cloud_connections_access_placeholder')}</Alert>
+        </ConnectionSectionWrapper>
+      </div>
+    );
   }
 
   const users = userLoader.data as AdminUser[];
@@ -100,6 +123,13 @@ export const ConnectionAccessTable: TabContainerPanelComponent<IConnectionFormPr
       );
     }
 
+    if (colKey === LAST_LOGIN_COLUMN.key && !isTeam) {
+      const lastLoginFullTime = item.lastLoginTime ? new Date(item.lastLoginTime).toLocaleString() : '-';
+      const lastLoginDate = item.lastLoginTime ? new Date(item.lastLoginTime).toLocaleDateString() : '-';
+
+      return <span title={lastLoginFullTime}>{lastLoginDate}</span>;
+    }
+
     return null;
   }
 
@@ -116,19 +146,21 @@ export const ConnectionAccessTable: TabContainerPanelComponent<IConnectionFormPr
   }
 
   return (
-    <div className="tw:flex tw:flex-col tw:gap-4 tw:overflow-auto tw:p-4">
-      <GrantManagementTable
-        items={items}
-        columns={COLUMNS}
-        getItemId={item => ('teamId' in item ? item.teamId : item.userId)}
-        isGranted={isGranted}
-        isEdited={isEdited}
-        getCell={getCell}
-        isVisible={isVisible}
-        disabled={formState.isDisabled}
-        onGrant={accessPart.grant}
-        onRevoke={accessPart.revoke}
-      />
+    <div className="tw:flex tw:flex-1 tw:overflow-auto">
+      <ConnectionSectionWrapper>
+        <GrantManagementTable
+          items={items}
+          columns={COLUMNS}
+          getItemId={item => ('teamId' in item ? item.teamId : item.userId)}
+          isGranted={isGranted}
+          isEdited={isEdited}
+          getCell={getCell}
+          isVisible={isVisible}
+          disabled={formState.isDisabled}
+          onGrant={accessPart.grant}
+          onRevoke={accessPart.revoke}
+        />
+      </ConnectionSectionWrapper>
     </div>
   );
 });

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,12 @@ import type { TeamsAdministrationFormState } from './TeamsAdministrationFormStat
 interface Props {
   state: TeamsAdministrationFormState;
   onCancel?: () => void;
-  onSave?: VoidFunction;
   className?: string;
 }
 
-export const TeamForm = observer<Props>(function TeamForm({ state, onCancel, onSave = () => {}, className }) {
+export const TeamForm = observer<Props>(function TeamForm({ state, onCancel, className }) {
   const styles = useS(style);
-  const service = useService(TeamsAdministrationFormService);
+  const teamsAdministrationFormService = useService(TeamsAdministrationFormService);
   const notificationService = useService(NotificationService);
   const translate = useTranslate();
   const editing = state.mode === 'edit';
@@ -43,7 +42,6 @@ export const TeamForm = observer<Props>(function TeamForm({ state, onCancel, onS
 
         notificationService.logSuccess({ title, message });
 
-        onSave?.();
         if (initialMode === FormMode.Create) {
           onCancel?.();
         }
@@ -63,7 +61,7 @@ export const TeamForm = observer<Props>(function TeamForm({ state, onCancel, onS
 
   return (
     <Form context={form} contents>
-      <TabsState container={service.parts} formState={state}>
+      <TabsState container={teamsAdministrationFormService.parts} formState={state}>
         <Container noWrap vertical>
           <Container className={s(styles, { topBar: true })} gap keepSize noWrap>
             <Container fill>
@@ -74,7 +72,7 @@ export const TeamForm = observer<Props>(function TeamForm({ state, onCancel, onS
               <Button type="button" disabled={state.isDisabled} variant="secondary" onClick={onCancel}>
                 {translate('ui_processing_cancel')}
               </Button>
-              <Button type="button" disabled={state.isDisabled || !state.isChanged} onClick={() => form.submit()}>
+              <Button type="button" loading={state.isSaving} disabled={state.isDisabled || !state.isChanged} onClick={() => form.submit()}>
                 {translate(!editing ? 'ui_processing_create' : 'ui_processing_save')}
               </Button>
             </Container>

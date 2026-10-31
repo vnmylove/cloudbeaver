@@ -8,12 +8,15 @@
 import { injectable } from '@cloudbeaver/core-di';
 import { CommonDialogService } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { SqlResultSetGeneratorId, type SqlResultRow } from '@cloudbeaver/core-sdk';
-import { ActionService, MenuService, type IAction, type IActionInfo } from '@cloudbeaver/core-view';
+import { LocalizationService } from '@cloudbeaver/core-localization';
+import { SqlResultSetGeneratorId, type SqlQueryGeneratorOptions, type SqlResultRow } from '@cloudbeaver/core-sdk';
+import { NavNodeInfoResource } from '@cloudbeaver/core-navigation-tree';
+import { ActionService, MenuService, type IAction } from '@cloudbeaver/core-view';
 import {
   DATA_CONTEXT_DV_DDM,
   DATA_CONTEXT_DV_DDM_RESULT_INDEX,
   DATA_CONTEXT_DV_RESULT_KEY,
+  DatabaseDataFeature,
   GridDataKeysUtils,
   GridSelectAction,
   GridViewAction,
@@ -23,15 +26,14 @@ import {
   IDatabaseDataSource,
   isResultSetDataModel,
   ResultSetDataAction,
-  ResultSetDataContentAction,
+  type IDataContainerOptions,
   type IDatabaseDataModel,
-  type IDatabaseValueHolder,
   type IGridColumnKey,
   type IGridDataKey,
   type IGridRowKey,
-  type IResultSetValue,
 } from '@cloudbeaver/plugin-data-viewer';
 
+import { ACTION_DATA_GRID_GENERATE_SQL_CREATE } from '../Actions/GenerateSQL/ACTION_DATA_GRID_GENERATE_SQL_CREATE.js';
 import { ACTION_DATA_GRID_GENERATE_SQL_DELETE } from '../Actions/GenerateSQL/ACTION_DATA_GRID_GENERATE_SQL_DELETE.js';
 import { ACTION_DATA_GRID_GENERATE_SQL_INSERT } from '../Actions/GenerateSQL/ACTION_DATA_GRID_GENERATE_SQL_INSERT.js';
 import { ACTION_DATA_GRID_GENERATE_SQL_SELECT } from '../Actions/GenerateSQL/ACTION_DATA_GRID_GENERATE_SQL_SELECT.js';
@@ -39,17 +41,27 @@ import { ACTION_DATA_GRID_GENERATE_SQL_SELECT_MANY } from '../Actions/GenerateSQ
 import { ACTION_DATA_GRID_GENERATE_SQL_UPDATE } from '../Actions/GenerateSQL/ACTION_DATA_GRID_GENERATE_SQL_UPDATE.js';
 import { MENU_DATA_GRID_GENERATE_SQL } from './GenerateSQL/MENU_DATA_GRID_GENERATE_SQL.js';
 import type { IDataContextProvider } from '@cloudbeaver/core-data-context';
-import { GeneratedSqlDialog, SqlGeneratorsResource } from '@cloudbeaver/plugin-sql-generator';
+import { getDefaultQueryGeneratorOptions, GeneratedSqlDialog, SqlGeneratorsResource, DDL_GENERATOR_ID } from '@cloudbeaver/plugin-sql-generator';
 import { isNotNullDefined } from '@dbeaver/js-helpers';
 
-@injectable(() => [ActionService, MenuService, CommonDialogService, NotificationService, SqlGeneratorsResource])
+@injectable(() => [
+  ActionService,
+  MenuService,
+  CommonDialogService,
+  NotificationService,
+  SqlGeneratorsResource,
+  LocalizationService,
+  NavNodeInfoResource,
+])
 export class DataGridContextMenuGenerateSqlService {
   constructor(
     private readonly actionService: ActionService,
     private readonly menuService: MenuService,
     private readonly commonDialogService: CommonDialogService,
     private readonly notificationService: NotificationService,
-    private readonly sqlGenerationResource: SqlGeneratorsResource,
+    private readonly sqlGeneratorsResource: SqlGeneratorsResource,
+    private readonly localizationService: LocalizationService,
+    private readonly navNodeInfoResource: NavNodeInfoResource,
   ) {}
 
   register(): void {
@@ -60,9 +72,14 @@ export class DataGridContextMenuGenerateSqlService {
       isApplicable: context => {
         const model = context.get(DATA_CONTEXT_DV_DDM);
         const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
+        const allowedFeatures = [DatabaseDataFeature.DataEditor, DatabaseDataFeature.QueryResult];
 
-        // TODO add more proper way to define to what features it should be added https://github.com/dbeaver/pro/issues/8299
-        return isResultSetDataModel(model) && !model.isReadonly(resultIndex) && !model.isDisabled(resultIndex);
+        return (
+          !!model &&
+          allowedFeatures.some(feature => model.source.hasFeature(feature)) &&
+          !model.isDisabled(resultIndex) &&
+          !model.isReadonly(resultIndex)
+        );
       },
       getItems: (context, items) => [...items, MENU_DATA_GRID_GENERATE_SQL],
     });
@@ -75,6 +92,7 @@ export class DataGridContextMenuGenerateSqlService {
         ACTION_DATA_GRID_GENERATE_SQL_DELETE,
         ACTION_DATA_GRID_GENERATE_SQL_SELECT,
         ACTION_DATA_GRID_GENERATE_SQL_SELECT_MANY,
+        ACTION_DATA_GRID_GENERATE_SQL_CREATE,
       ],
     });
 
@@ -88,43 +106,36 @@ export class DataGridContextMenuGenerateSqlService {
         ACTION_DATA_GRID_GENERATE_SQL_DELETE,
         ACTION_DATA_GRID_GENERATE_SQL_SELECT,
         ACTION_DATA_GRID_GENERATE_SQL_SELECT_MANY,
+        ACTION_DATA_GRID_GENERATE_SQL_CREATE,
       ],
       isDisabled: context => {
         const model = context.get(DATA_CONTEXT_DV_DDM)!;
 
-        if (model.isLoading()) {
-          return true;
-        }
-
-        return hasLargeObjectValuesInSelectedRows(context);
-      },
-      getActionInfo: (context, action): IActionInfo => {
-        const actionInfo = action.info;
-
-        if (hasLargeObjectValuesInSelectedRows(context)) {
-          return {
-            ...actionInfo,
-            tooltip: 'data_grid_table_generate_sql_disabled_lob_tooltip',
-          };
-        }
-
-        return actionInfo;
+        return model.isLoading();
       },
       handler: async (context, action) => {
-        await this.openSqlDialog(context, mapGeneratorIdFromAction(action));
+        if (action === ACTION_DATA_GRID_GENERATE_SQL_CREATE) {
+          await this.openEntitySqlDialog(context);
+          return;
+        }
+
+        await this.openSqlDialog(context, mapGeneratorIdFromAction(action), action.info.label);
       },
     });
   }
 
-  private async openSqlDialog(context: IDataContextProvider, generatorId: SqlResultSetGeneratorId): Promise<void> {
+  private async openSqlDialog(context: IDataContextProvider, generatorId: SqlResultSetGeneratorId, generatorLabel: string): Promise<void> {
     const model = context.get(DATA_CONTEXT_DV_DDM)!;
     const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
     const key = context.get(DATA_CONTEXT_DV_RESULT_KEY);
+    const options = model.source.options as IDataContainerOptions | undefined;
+    const containerNodePath = options?.containerNodePath;
 
     if (!isResultSetDataModel(model)) {
       return;
     }
 
+    const nodePath = options?.containerNodePath;
     const select = model.source.tryGetAction(resultIndex, IDatabaseDataSelectAction, GridSelectAction);
     const projectId = model.source.executionContext?.context?.projectId;
     const connectionId = model.source.executionContext?.context?.connectionId;
@@ -150,30 +161,134 @@ export class DataGridContextMenuGenerateSqlService {
     }
 
     try {
-      const query = await this.sqlGenerationResource.generateResultSetSql({
+      const query = await this.generateQuery({
         projectId,
         connectionId,
         contextId,
-        resultsId: resultId,
+        resultId,
         generatorId,
-        selectedRows: rows,
+        rows,
+        options: getDefaultQueryGeneratorOptions(),
       });
 
       if (!query) {
-        this.notificationService.logError({
-          title: 'data_grid_table_generate_sql_error_title',
-          message: 'data_grid_table_generate_sql_error_no_query',
-        });
         return;
       }
 
       await this.commonDialogService.open(GeneratedSqlDialog, {
         query,
-        nodeId: connectionId,
+        nodeId: nodePath ?? connectionId,
+        nodeName: this.getEntityNameFromNodePath(containerNodePath, model.name),
+        generatorId,
+        generatorName: this.localizationService.translate(generatorLabel),
+        options: getDefaultQueryGeneratorOptions(),
+        regenerateQuery: options =>
+          this.generateQuery({
+            projectId,
+            connectionId,
+            contextId,
+            resultId,
+            generatorId,
+            rows,
+            options,
+          }),
       });
     } catch (e: any) {
       this.notificationService.logException(e, 'data_grid_table_generate_sql_error_title');
     }
+  }
+
+  private async openEntitySqlDialog(context: IDataContextProvider): Promise<void> {
+    const model = context.get(DATA_CONTEXT_DV_DDM)!;
+    const options = model.source.options as IDataContainerOptions | undefined;
+    const nodePathList = options?.containerNodePath;
+
+    if (!isResultSetDataModel(model)) {
+      return;
+    }
+
+    const connectionId = model.source.executionContext?.context?.connectionId;
+
+    if (!nodePathList || !isNotNullDefined(connectionId)) {
+      this.notificationService.logError({
+        title: 'data_grid_table_generate_sql_error_title',
+        message: 'data_grid_table_generate_sql_error_no_connection',
+      });
+      return;
+    }
+
+    try {
+      const generators = await this.sqlGeneratorsResource.load(nodePathList);
+      const createGenerator = generators.find(g => g.id.toLowerCase().includes(DDL_GENERATOR_ID.toLowerCase()));
+
+      if (!createGenerator) {
+        this.notificationService.logInfo({
+          title: 'data_grid_table_generate_sql_error_title',
+          message: 'data_grid_table_generate_sql_ddl_no_support',
+        });
+        return;
+      }
+
+      const query = await this.sqlGeneratorsResource.generateEntityQuery(createGenerator.id, nodePathList, getDefaultQueryGeneratorOptions());
+
+      await this.commonDialogService.open(GeneratedSqlDialog, {
+        query,
+        nodeId: nodePathList,
+        nodeName: this.getEntityNameFromNodePath(nodePathList, model.name),
+        generatorId: createGenerator.id,
+        generatorName: createGenerator.label,
+        options: getDefaultQueryGeneratorOptions(),
+        regenerateQuery: genOptions => this.sqlGeneratorsResource.generateEntityQuery(createGenerator.id, nodePathList, genOptions),
+      });
+    } catch (e: any) {
+      this.notificationService.logException(e, 'data_grid_table_generate_sql_error_title');
+    }
+  }
+
+  private async generateQuery({
+    projectId,
+    connectionId,
+    contextId,
+    resultId,
+    generatorId,
+    rows,
+    options,
+  }: {
+    projectId: string;
+    connectionId: string;
+    contextId: string;
+    resultId: string;
+    generatorId: SqlResultSetGeneratorId;
+    rows: SqlResultRow[];
+    options: SqlQueryGeneratorOptions;
+  }): Promise<string> {
+    const query = await this.sqlGeneratorsResource.generateResultSetSql({
+      projectId,
+      connectionId,
+      contextId,
+      resultsId: resultId,
+      generatorId,
+      selectedRows: rows,
+      generatorOptions: options,
+    });
+
+    if (!query) {
+      throw new Error('data_grid_table_generate_sql_error_no_query');
+    }
+
+    return query;
+  }
+
+  private getEntityNameFromNodePath(nodePath: string | undefined, fallbackName?: string | null): string | undefined {
+    if (nodePath) {
+      const name = this.navNodeInfoResource.get(nodePath)?.name;
+
+      if (name) {
+        return name;
+      }
+    }
+
+    return fallbackName ?? undefined;
   }
 }
 
@@ -247,43 +362,4 @@ function getSqlResultRows(
   }
 
   return result;
-}
-
-function hasLargeObjectValuesInSelectedRows(context: IDataContextProvider): boolean {
-  const model = context.get(DATA_CONTEXT_DV_DDM)!;
-  const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
-  const key = context.get(DATA_CONTEXT_DV_RESULT_KEY);
-
-  const format = model.source.getAction(resultIndex, IDatabaseDataFormatAction);
-  const view = model.source.getAction(resultIndex, GridViewAction);
-  const data = model.source.getAction(resultIndex, ResultSetDataAction);
-  const content = model.source.getAction(resultIndex, ResultSetDataContentAction);
-  const select = model.source.tryGetAction(resultIndex, IDatabaseDataSelectAction, GridSelectAction);
-
-  const selectedElements = select?.getSelectedElements() || [];
-  const rowKeys = getRowKeys(selectedElements, key);
-  const columnKeys = view.columnKeys;
-
-  for (const rowKey of rowKeys) {
-    const rowValue = data.getRowValue(rowKey);
-
-    if (!rowValue) {
-      continue;
-    }
-
-    for (const columnKey of columnKeys) {
-      const cellKey: IGridDataKey = { row: rowKey, column: columnKey };
-      const cellHolder = view.getCellHolder(cellKey) as IDatabaseValueHolder<IGridDataKey, IResultSetValue>;
-
-      if (format.isBinary(cellHolder)) {
-        return true;
-      }
-
-      if (content.isTextTruncated(cellHolder) || content.isBlobTruncated(cellHolder)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }

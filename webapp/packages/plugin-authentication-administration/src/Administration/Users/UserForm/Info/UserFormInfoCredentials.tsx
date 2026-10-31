@@ -1,18 +1,21 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
 import { observer } from 'mobx-react-lite';
+import { useState } from 'react';
 
 import { AUTH_PROVIDER_LOCAL_ID, AuthProvidersResource, isLocalUser, UsersResource } from '@cloudbeaver/core-authentication';
 import {
   Container,
   GroupTitle,
   InputField,
-  useCustomInputValidation,
+  useExecutor,
+  useFormCustomInputValidation,
   usePasswordValidation,
   useResource,
   useTranslate,
@@ -39,13 +42,15 @@ export const UserFormInfoCredentials = observer<Props>(function UserFormInfoCred
   const authProvidersResource = useResource(UserFormInfoCredentials, AuthProvidersResource, null);
   const passwordValidationRef = usePasswordValidation();
 
+  const [repeatedPassword, setRepeatedPassword] = useState('');
+
   let local = authProvidersResource.resource.isEnabled(AUTH_PROVIDER_LOCAL_ID);
 
   if (!local) {
     local = !editing || (!!userInfo.data && isLocalUser(userInfo.data));
   }
 
-  const usernameValidationRef = useCustomInputValidation<string>(value => {
+  const { ref: usernameValidationRef } = useFormCustomInputValidation<string>(value => {
     const v = value.trim();
 
     if (!v) {
@@ -59,11 +64,20 @@ export const UserFormInfoCredentials = observer<Props>(function UserFormInfoCred
     return null;
   });
 
-  const passwordRepeatRef = useCustomInputValidation<string>(value => {
+  const { ref: passwordRepeatRef } = useFormCustomInputValidation<string>(value => {
     if (!isValuesEqual(value, tabState.state.password, null)) {
       return translate('authentication_user_passwords_not_match');
     }
     return null;
+  });
+
+  useExecutor({
+    executor: formState.submitTask,
+    handlers: [
+      function handleSubmit(data) {
+        setRepeatedPassword('');
+      },
+    ],
   });
 
   return (
@@ -102,13 +116,14 @@ export const UserFormInfoCredentials = observer<Props>(function UserFormInfoCred
           <InputField
             ref={passwordRepeatRef}
             type="password"
-            name="passwordRepeat"
             placeholder={editing ? PASSWORD_PLACEHOLDER : ''}
             readOnly={disabled}
             required={!editing}
-            canShowPassword
+            value={repeatedPassword}
+            canShowPassword={repeatedPassword !== ''}
             keepSize
             tiny
+            onChange={v => setRepeatedPassword(v)}
           >
             {translate('authentication_user_password_repeat')}
           </InputField>

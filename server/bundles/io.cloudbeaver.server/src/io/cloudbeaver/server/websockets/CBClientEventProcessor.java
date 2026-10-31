@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,21 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.websocket.WSUtils;
 import org.jkiss.dbeaver.model.websocket.event.WSClientEvent;
+import org.jkiss.dbeaver.model.websocket.registry.WSClientEventDescriptor;
+import org.jkiss.dbeaver.model.websocket.registry.WSEventRegistry;
 import org.jkiss.utils.CommonUtils;
 
 public class CBClientEventProcessor {
 
     private static final Log log = Log.getLog(CBClientEventProcessor.class);
 
-    final BaseWebSession webSession;
+    volatile BaseWebSession webSession;
 
     public CBClientEventProcessor(@NotNull BaseWebSession webSession) {
+        this.webSession = webSession;
+    }
+
+    void setWebSession(@NotNull BaseWebSession webSession) {
         this.webSession = webSession;
     }
 
@@ -47,6 +53,17 @@ public class CBClientEventProcessor {
         } catch (Exception e) {
             log.error("Error parsing event: " + e.getMessage(), e);
             webSession.addSessionError(new DBWebException("Invalid event: " + e.getMessage()));
+            return;
+        }
+
+        // Handle with custom handlers
+         WSClientEventDescriptor ced = WSEventRegistry.getInstance().getClientEvent(clientEvent.getId());
+        if (ced != null && ced.getHandler() != null) {
+            try {
+                ced.getHandler().handleEvent(webSession, clientEvent);
+            } catch (Exception e) {
+                log.error("Error handling event '" + clientEvent.getId() + "'", e);
+            }
             return;
         }
 
@@ -88,6 +105,13 @@ public class CBClientEventProcessor {
                         taskParamsConfirmationEvent.getTaskId(),
                         taskParamsConfirmationEvent.getParameters()
                     );
+                }
+                break;
+            }
+            case WSSessionCancelActionClientEvent.ID: {
+                if (webSession instanceof WebSession session) {
+                    var cancelActionEvent = (WSSessionCancelActionClientEvent) clientEvent;
+                    session.handleActionCancelledEvent(cancelActionEvent.getActionId());
                 }
                 break;
             }

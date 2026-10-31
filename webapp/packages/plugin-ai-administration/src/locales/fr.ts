@@ -1,0 +1,23 @@
+export default [
+  ['ai_administration_tab_title', "Paramètres d'IA"],
+  ['ai_administration_tab_main', 'Principal'],
+  ['ai_administration_settings', "Paramètres d'IA"],
+  ['ai_administration_settings_save_success', "Les paramètres de l'IA ont été sauvegardé"],
+  ['ai_administration_settings_save_fail', "Échec de l'enregistrement des réglages de l'IA"],
+  ['ai_administration_settings_load_fail', "Échec du chargement des paramètres de l'IA"],
+  ['ai_administration_language_model_settings_save_fail', "Échec de l'enregistrement des réglages du modèle"],
+  ['plugin_ai_administration_rag_label', 'Envoyer uniquement les objets pertinents à l’IA (Expérimental)'],
+  [
+    'plugin_ai_administration_rag_description',
+    'DBeaver analyse votre requête et n’envoie à l’IA que les objets pertinents, améliorant ainsi le temps de réponse et la précision tout en réduisant l’utilisation des tokens (RAG). Actuellement pris en charge uniquement lors de l’utilisation de PostgreSQL Cloudbeaver DB et des modèles OpenAI/Copilot.',
+  ],
+  ['plugin_ai_administration_language_label', 'Langue'],
+  ['plugin_ai_administration_language_description', "Langue par défaut pour les réponses de l'IA"],
+  ['plugin_ai_administration_language_validation_error_title', 'Erreur de validation de la langue'],
+  ['plugin_ai_administration_language_validation_error', 'La langue ne doit contenir que des lettres et des tirets'],
+  ['plugin_ai_administration_language_length_validation_error', 'La langue ne doit pas dépasser 128 caractères'],
+  ['plugin_ai_administration_default_profile_label', 'Profil par défaut'],
+  ['plugin_ai_administration_default_profile_description', "Profil utilisé par défaut pour les fonctionnalités d'IA"],
+  ['plugin_ai_administration_default_profile_no_profiles_title', 'No profiles available'],
+  ['plugin_ai_administration_default_profile_no_profiles_message', 'Créez un profil avant de sélectionner un profil par défaut'],
+];

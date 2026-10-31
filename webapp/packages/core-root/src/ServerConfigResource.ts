@@ -14,6 +14,7 @@ import { DataSynchronizationService } from './DataSynchronization/DataSynchroniz
 import { ServerConfigEventHandler } from './ServerConfigEventHandler.js';
 
 export const FEATURE_GIT_ID = 'git';
+export const FEATURE_AI_ID = 'ai';
 
 export type ServerConfig = ServerConfigFragment;
 
@@ -70,6 +71,10 @@ export class ServerConfigResource extends CachedDataResource<ServerConfig | null
 
   get publicCredentialsSaveEnabled(): boolean {
     return this.data?.publicCredentialsSaveEnabled ?? false;
+  }
+
+  get dbUserPasswordChangeEnabled(): boolean {
+    return this.data?.dbUserPasswordChangeEnabled ?? false;
   }
 
   get anonymousAccessEnabled(): boolean {

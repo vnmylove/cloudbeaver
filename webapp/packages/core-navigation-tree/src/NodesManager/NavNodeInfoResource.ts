@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import type { NavNode } from './EntityTypes.js';
 
 type NavNodeInfo = NavNodeInfoFragment;
 
-export const ROOT_NODE_PATH = '';
+export const ROOT_NODE_PATH = 'node://';
 
 interface INodeMetadata extends ICachedResourceMetadata {
   withDetails: boolean;
@@ -74,6 +74,17 @@ export class NavNodeInfoResource extends CachedMapResource<string, NavNode, Reco
     return parents;
   }
 
+  async resolveParents(key: string): Promise<string[]> {
+    let parents = this.getParents(key);
+
+    if (key !== ROOT_NODE_PATH && !parents.includes(ROOT_NODE_PATH)) {
+      await this.loadNodeParents(key);
+      parents = this.getParents(key);
+    }
+
+    return parents;
+  }
+
   getParent(key: string): string | undefined;
   getParent(key: ResourceKeyList<string>): (string | undefined)[];
   getParent(key: ResourceKeySimple<string>): string | undefined | (string | undefined)[];
@@ -109,7 +120,7 @@ export class NavNodeInfoResource extends CachedMapResource<string, NavNode, Reco
   }
 
   navNodeInfoToNavNode(node: NavNodeInfo, parentId?: string): NavNode {
-    const oldNode = this.get(node.id);
+    const oldNode = this.get(node.uri);
 
     let newNode: NavNode = {
       ...node,
@@ -169,15 +180,15 @@ export class NavNodeInfoResource extends CachedMapResource<string, NavNode, Reco
     });
 
     return runInAction(() => {
-      const navNode = this.navNodeInfoToNavNode(node, parents[0]?.id);
+      // The API returns parents from closest to farthest and omits DBNRoot.
+      // Append ROOT_NODE_PATH to complete the parent chain stored by the frontend.
+      const parentUris = [...parents.map(parent => parent.uri), ROOT_NODE_PATH];
+      const nodeParentId = node.uri === ROOT_NODE_PATH ? undefined : parentUris[0];
 
-      this.set(resourceKeyList([...parents.map(node => node.id), navNode.id]), [
-        ...parents.reduce((list, node, index, array) => {
-          list.push(this.navNodeInfoToNavNode(node, array[index + 1]?.id));
-          return list;
-        }, [] as NavNode[]),
-        navNode,
-      ]);
+      const navNode = this.navNodeInfoToNavNode(node, nodeParentId);
+      const navParents = parents.map((parent, index) => this.navNodeInfoToNavNode(parent, parentUris[index + 1]));
+
+      this.set(resourceKeyList([...parents.map(parent => parent.uri), navNode.uri]), [...navParents, navNode]);
       return navNode;
     });
   }
@@ -199,7 +210,7 @@ export class NavNodeInfoResource extends CachedMapResource<string, NavNode, Reco
 }
 
 export function getNodeDisplayName(node: NavNode): string {
-  return node.name ?? node.id;
+  return node.name ?? node.uri;
 }
 
 export function getNodePlainName(node: NavNode): string {

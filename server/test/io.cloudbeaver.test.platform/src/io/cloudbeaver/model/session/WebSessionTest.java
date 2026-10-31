@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2025 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,24 @@ package io.cloudbeaver.model.session;
 
 import io.cloudbeaver.CloudbeaverMockTest;
 import io.cloudbeaver.DBWebException;
+import io.cloudbeaver.WebSessionProjectImpl;
+import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.app.ServletAuthApplication;
+import org.jkiss.dbeaver.model.DBPDataSourceContainer;
+import org.jkiss.dbeaver.model.access.DBACredentialsProvider;
+import org.jkiss.dbeaver.model.auth.SMSession;
+import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
+import org.jkiss.dbeaver.model.connection.DBPDriver;
 import org.jkiss.dbeaver.model.websocket.event.WSEventController;
 import org.jkiss.utils.function.ThrowableConsumer;
 import org.jkiss.utils.function.ThrowableFunction;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,7 +43,7 @@ public class WebSessionTest extends CloudbeaverMockTest {
 
     private WebSession session;
 
-    @Before
+    @BeforeEach
     public void initWebSession() throws Exception {
         session = new WebSession(getFakeRequestInfo(), mockApplication(), Collections.emptyMap());
     }
@@ -44,13 +52,13 @@ public class WebSessionTest extends CloudbeaverMockTest {
     public void localeAndBasicAttributes() throws Exception {
         // Locale
         session.setLocale("test-locale");
-        Assert.assertEquals("test-locale", session.getLocale());
+        Assertions.assertEquals("test-locale", session.getLocale());
         session.setLocale(null);
-        Assert.assertEquals(Locale.getDefault().getLanguage(), session.getLocale());
+        Assertions.assertEquals(Locale.getDefault().getLanguage(), session.getLocale());
 
         // Persistent attribute must survive reset/close
         session.setAttribute("persistentKey", "persistValue", true);
-        Assert.assertEquals("persistValue", session.getAttribute("persistentKey"));
+        Assertions.assertEquals("persistValue", session.getAttribute("persistentKey"));
 
         // Non-persistent attribute created via getAttribute with creator/disposer
         AtomicBoolean disposed = new AtomicBoolean(false);
@@ -60,22 +68,119 @@ public class WebSessionTest extends CloudbeaverMockTest {
         };
 
         String created = session.getAttribute("createdKey", creator, disposer);
-        Assert.assertEquals("created", created);
+        Assertions.assertEquals("created", created);
 
-        // After close() non-persistent attribute should be disposed; persistent remain
+        // persistent attribute should still be available
+        Assertions.assertEquals("persistValue", session.getAttribute("persistentKey"));
+
         session.close();
 
-        Assert.assertTrue("disposer must be invoked during close()", disposed.get());
-        // persistent attribute should still be available
-        Assert.assertEquals("persistValue", session.getAttribute("persistentKey"));
+        // persistent attribute should иу тгдд
+        Assertions.assertNull(session.getAttribute("persistentKey"), "persistValue");
+        Assertions.assertTrue(disposed.get(), "disposer must be invoked during close()");
     }
 
     @Test
     public void asyncTaskStatusNotFound() throws Exception {
-        Assert.assertThrows(
-            "DBWebException must be thrown for unknown async task",
-            DBWebException.class, () -> session.asyncTaskStatus("nonexistent-task", false)
+        Assertions.assertThrows(
+            DBWebException.class, () -> session.asyncTaskStatus("nonexistent-task", false),
+            "DBWebException must be thrown for unknown async task"
         );
+    }
+
+    @Test
+    public void asyncTaskCancellationNotifiesProcessor() throws Exception {
+        WebAsyncTaskProcessor<?> processor = Mockito.mock(WebAsyncTaskProcessor.class);
+        WebAsyncTaskInfo taskInfo = session.createAsyncTask("Test task");
+        session.runAsyncTask(taskInfo, processor);
+
+        session.asyncTaskCancel(taskInfo.getId());
+
+        Mockito.verify(processor).cancel();
+    }
+
+    @Test
+    public void authInfoIsIdentifiedByProviderAndConfiguration() throws Exception {
+        WebAuthInfo firstConfig = mockAuthInfo("ldap", "ldap-1");
+        WebAuthInfo secondConfig = mockAuthInfo("ldap", "ldap-2");
+        WebAuthInfo updatedFirstConfig = mockAuthInfo("ldap", "ldap-1");
+
+        session.addAuthInfo(firstConfig);
+        session.addAuthInfo(secondConfig);
+
+        Assertions.assertEquals(2, session.getAllAuthInfo().size());
+        Assertions.assertSame(firstConfig, session.getAuthInfo("ldap", "ldap-1"));
+        Assertions.assertSame(secondConfig, session.getAuthInfo("ldap", "ldap-2"));
+        Assertions.assertNull(session.getAuthInfo("ldap", "ldap-3"));
+
+        session.addAuthInfo(updatedFirstConfig);
+
+        Assertions.assertEquals(2, session.getAllAuthInfo().size());
+        Assertions.assertSame(updatedFirstConfig, session.getAuthInfo("ldap", "ldap-1"));
+        Assertions.assertSame(secondConfig, session.getAuthInfo("ldap", "ldap-2"));
+
+        Assertions.assertEquals(List.of(secondConfig), session.removeAuthInfo("ldap", "ldap-2"));
+        Assertions.assertNull(session.getAuthInfo("ldap", "ldap-2"));
+        Assertions.assertSame(updatedFirstConfig, session.getAuthInfo("ldap", "ldap-1"));
+    }
+
+    @Test
+    public void providerOnlyRemovalKeepsSingleTargetBehavior() throws Exception {
+        WebAuthInfo firstConfig = mockAuthInfo("ldap", "ldap-1");
+        WebAuthInfo secondConfig = mockAuthInfo("ldap", "ldap-2");
+        session.addAuthInfo(firstConfig);
+        session.addAuthInfo(secondConfig);
+
+        Assertions.assertEquals(List.of(firstConfig), session.removeAuthInfo("ldap"));
+        Assertions.assertNull(session.getAuthInfo("ldap", "ldap-1"));
+        Assertions.assertSame(secondConfig, session.getAuthInfo("ldap", "ldap-2"));
+    }
+
+    @Test
+    public void inputOnlyAuthRemainsRestrictedDuringCredentialProviderCallback() throws Exception {
+        SMSession authSession = Mockito.mock(
+            SMSession.class,
+            Mockito.withSettings().extraInterfaces(DBACredentialsProvider.class)
+        );
+        DBACredentialsProvider contextCredentialsProvider = (DBACredentialsProvider) authSession;
+        WebAuthInfo authInfo = mockAuthInfo("entra", "entra-1");
+        Mockito.when(authInfo.getAuthSession()).thenReturn(authSession);
+        session.addAuthInfo(authInfo);
+
+        DBPDataSourceContainer dataSource = Mockito.mock(DBPDataSourceContainer.class);
+        DBPDriver driver = Mockito.mock(DBPDriver.class);
+        Mockito.when(dataSource.getDriver()).thenReturn(driver);
+        DBPConnectionConfiguration configuration = new DBPConnectionConfiguration();
+
+        session.provideInputAuthParameters(session.getProgressMonitor(), dataSource, configuration);
+        session.provideAuthParameters(session.getProgressMonitor(), dataSource, configuration);
+
+        Assertions.assertEquals(
+            true,
+            configuration.getRuntimeAttribute(WebSession.RUNTIME_PARAM_INPUT_AUTH_ONLY)
+        );
+        Mockito.verify(contextCredentialsProvider, Mockito.never()).provideAuthParameters(
+            Mockito.any(),
+            Mockito.any(),
+            Mockito.any()
+        );
+    }
+
+    @Test
+    public void projectLookupFallsBackToActiveProjectOnlyForMissingId() {
+        WebSessionProjectImpl activeProject = Mockito.mock(WebSessionProjectImpl.class);
+        WebSessionProjectImpl accessibleProject = Mockito.mock(WebSessionProjectImpl.class);
+        Mockito.when(activeProject.getId()).thenReturn("active-project");
+        Mockito.when(accessibleProject.getId()).thenReturn("accessible-project");
+
+        WebSessionWorkspace workspace = session.getWorkspace();
+        session.addSessionProject(activeProject);
+        session.addSessionProject(accessibleProject);
+        workspace.setActiveProject(activeProject);
+
+        Assertions.assertSame(activeProject, session.getProjectById(null));
+        Assertions.assertSame(accessibleProject, session.getProjectById("accessible-project"));
+        Assertions.assertNull(session.getProjectById("inaccessible-project"));
     }
 
     private WebHttpRequestInfo getFakeRequestInfo() {
@@ -95,5 +200,13 @@ public class WebSessionTest extends CloudbeaverMockTest {
         Mockito.when(app.isAnonymousAccessEnabled()).thenReturn(false);
         Mockito.when(app.getEventController()).thenReturn(eventController);
         return app;
+    }
+
+    private WebAuthInfo mockAuthInfo(String providerId, String configurationId) {
+        WebAuthInfo authInfo = Mockito.mock(WebAuthInfo.class);
+        Mockito.when(authInfo.getAuthProvider()).thenReturn(providerId);
+        Mockito.when(authInfo.getAuthConfiguration()).thenReturn(configurationId);
+        Mockito.when(authInfo.getAuthSession()).thenReturn(Mockito.mock(SMSession.class));
+        return authInfo;
     }
 }

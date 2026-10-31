@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,12 @@ import {
 } from '@cloudbeaver/core-resource-manager';
 import { createPath, getPathParent } from '@cloudbeaver/core-utils';
 import { ACTION_NEW_FOLDER, ActionService, type IAction, MenuService } from '@cloudbeaver/core-view';
-import { DATA_CONTEXT_ELEMENTS_TREE, MENU_ELEMENTS_TREE_TOOLS, TreeSelectionService } from '@cloudbeaver/plugin-navigation-tree';
+import {
+  DATA_CONTEXT_ELEMENTS_TREE,
+  MENU_ELEMENTS_TREE_TOOLS,
+  MENU_NAVIGATION_TREE_CREATE,
+  TreeSelectionService,
+} from '@cloudbeaver/plugin-navigation-tree';
 import { FolderDialog } from '@cloudbeaver/plugin-projects';
 import { ResourceManagerService } from '@cloudbeaver/plugin-resource-manager';
 
@@ -122,7 +127,8 @@ export class ResourceFoldersBootstrap extends Bootstrap {
     });
 
     this.menuService.addCreator({
-      menus: [MENU_ELEMENTS_TREE_TOOLS],
+      menus: [MENU_ELEMENTS_TREE_TOOLS, MENU_NAVIGATION_TREE_CREATE],
+      contexts: [DATA_CONTEXT_ELEMENTS_TREE, DATA_CONTEXT_RESOURCE_MANAGER_TREE_RESOURCE_TYPE_ID],
       getItems: (context, items) => {
         if (!items.includes(ACTION_NEW_FOLDER)) {
           return [...items, ACTION_NEW_FOLDER];
@@ -136,9 +142,9 @@ export class ResourceFoldersBootstrap extends Bootstrap {
   private async moveResourceToFolder({ type, targetNode, moveContexts }: INodeMoveData, contexts: IExecutionContextProvider<INodeMoveData>) {
     const move = contexts.getContext(navNodeMoveContext);
     const nodes = getNodesFromContext(moveContexts);
-    const nodeIdList = nodes.map(node => node.id);
-    const children = this.navTreeResource.get(targetNode.id) ?? [];
-    const targetProject = this.projectsNavNodeService.getProject(targetNode.id);
+    const nodeIdList = nodes.map(node => node.uri);
+    const children = this.navTreeResource.get(targetNode.uri) ?? [];
+    const targetProject = this.projectsNavNodeService.getProject(targetNode.uri);
 
     if (!targetProject?.canEditResources || (!targetNode.folder && targetNode.nodeType !== NAV_NODE_TYPE_RM_PROJECT)) {
       return;
@@ -147,9 +153,9 @@ export class ResourceFoldersBootstrap extends Bootstrap {
     const supported = nodes.every(node => {
       if (
         ![NAV_NODE_TYPE_RM_PROJECT, NAV_NODE_TYPE_RM_RESOURCE].includes(node.nodeType!) ||
-        targetProject !== this.projectsNavNodeService.getProject(node.id) ||
-        children.includes(node.id) ||
-        targetNode.id === node.id
+        targetProject !== this.projectsNavNodeService.getProject(node.uri) ||
+        children.includes(node.uri) ||
+        targetNode.uri === node.uri
       ) {
         return false;
       }
@@ -165,7 +171,7 @@ export class ResourceFoldersBootstrap extends Bootstrap {
       move.setCanMove(true);
     } else {
       try {
-        const targetRmFolderId = getResourceKeyFromNodeId(targetNode.id);
+        const targetRmFolderId = getResourceKeyFromNodeId(targetNode.uri);
 
         if (targetRmFolderId) {
           for (const nodeId of nodeIdList) {

@@ -1,14 +1,10 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-
-.placeholder {
-  composes: placeholder from global;
-}
 
 .tab {
   position: relative;
@@ -32,11 +28,11 @@
   }
 
   &:not(:global([aria-selected='true'])) {
-    background-color: transparent !important;
+    background-color: transparent;
   }
 }
 
-.actions:not(:empty) + .tab {
+.tab:has(+ .actions:not(:empty)) {
   padding-right: 14px;
 }
 

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,13 +8,18 @@
 import { action, computed, type IReactionDisposer, observable } from 'mobx';
 
 import { ConfirmationDialog, getComputed, useExecutor, useObservableRef, useResource } from '@cloudbeaver/core-blocks';
-import { ConnectionDialectResource, ConnectionExecutionContextService, createConnectionParam } from '@cloudbeaver/core-connections';
+import {
+  ConnectionDialectResource,
+  ConnectionExecutionContextService,
+  ConnectionInfoResource,
+  createConnectionParam,
+} from '@cloudbeaver/core-connections';
 import { useService } from '@cloudbeaver/core-di';
 import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { SyncExecutor } from '@cloudbeaver/core-executor';
 import type { SqlCompletionProposal, SqlScriptInfoFragment } from '@cloudbeaver/core-sdk';
-import { createLastPromiseGetter, type LastPromiseGetter, throttleAsync } from '@cloudbeaver/core-utils';
+import { createLastPromiseGetter, type LastPromiseGetter } from '@cloudbeaver/core-utils';
 
 import type { ISqlEditorTabState } from '../ISqlEditorTabState.js';
 import { ESqlDataSourceFeatures } from '../SqlDataSource/ESqlDataSourceFeatures.js';
@@ -22,13 +27,13 @@ import type { ISqlEditorCursor } from '../SqlDataSource/ISqlDataSource.js';
 import { SqlDialectInfoService } from '../SqlDialectInfoService.js';
 import { SqlEditorService } from '../SqlEditorService.js';
 import { type ISQLScriptSegment } from '../SQLParser.js';
-import { SqlExecutionPlanService } from '../SqlResultTabs/ExecutionPlan/SqlExecutionPlanService.js';
 import { OUTPUT_LOGS_TAB_ID } from '../SqlResultTabs/OutputLogs/OUTPUT_LOGS_TAB_ID.js';
 import { SqlQueryService } from '../SqlResultTabs/SqlQueryService.js';
 import { SqlResultTabsService } from '../SqlResultTabs/SqlResultTabsService.js';
 import type { ISQLEditorData } from './ISQLEditorData.js';
 import { SqlEditorSettingsService } from '../SqlEditorSettingsService.js';
 import { SqlEditorModelService } from '../SqlEditorModel/SqlEditorModelService.js';
+import { SqlEditorPermissionService } from '../SqlEditorPermissionService.js';
 
 interface ISQLEditorDataPrivate extends ISQLEditorData {
   readonly sqlDialectInfoService: SqlDialectInfoService;
@@ -36,10 +41,11 @@ interface ISQLEditorDataPrivate extends ISQLEditorData {
   readonly sqlQueryService: SqlQueryService;
   readonly sqlEditorService: SqlEditorService;
   readonly notificationService: NotificationService;
-  readonly sqlExecutionPlanService: SqlExecutionPlanService;
   readonly sqlEditorSettingsService: SqlEditorSettingsService;
   readonly commonDialogService: CommonDialogService;
   readonly sqlResultTabsService: SqlResultTabsService;
+  readonly connectionInfoResource: ConnectionInfoResource;
+  readonly sqlEditorPermissionService: SqlEditorPermissionService;
   readonly getLastAutocomplete: LastPromiseGetter<SqlCompletionProposal[]>;
   readonly parseScript: LastPromiseGetter<SqlScriptInfoFragment>;
 
@@ -59,11 +65,12 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
   const sqlDialectInfoService = useService(SqlDialectInfoService);
   const sqlEditorService = useService(SqlEditorService);
   const notificationService = useService(NotificationService);
-  const sqlExecutionPlanService = useService(SqlExecutionPlanService);
   const sqlResultTabsService = useService(SqlResultTabsService);
   const commonDialogService = useService(CommonDialogService);
   const sqlEditorSettingsService = useService(SqlEditorSettingsService);
   const sqlEditorModelService = useService(SqlEditorModelService);
+  const connectionInfoResource = useService(ConnectionInfoResource);
+  const sqlEditorPermissionService = useService(SqlEditorPermissionService);
 
   const model = sqlEditorModelService.getOrCreate(state);
 
@@ -115,10 +122,6 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         return this.model.dataSource?.incomingScript;
       },
 
-      get isExecutionAllowed(): boolean {
-        return !!this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.executable) && this.sqlEditorSettingsService.scriptExecutionEnabled;
-      },
-
       onExecute: new SyncExecutor(),
       onSegmentExecute: new SyncExecutor(),
 
@@ -127,15 +130,35 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       reactionDisposer: null,
       hintsLimitIsMet: false,
 
+      isExecutionAllowed(): boolean {
+        const executionContext = this.model.dataSource?.executionContext;
+
+        if (!executionContext) {
+          return false;
+        }
+
+        const key = createConnectionParam(executionContext.projectId, executionContext.connectionId);
+        return (
+          !!this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.executable) && this.sqlEditorPermissionService.isScriptExecutionEnabled(key)
+        );
+      },
+
       setCursor(begin: number, end = begin): void {
         this.model.dataSource?.setCursor(begin, end);
       },
 
       getLastAutocomplete: createLastPromiseGetter(),
 
-      getHintProposals: throttleAsync(async function getHintProposals(this: ISQLEditorDataPrivate, position, simple) {
+      async getHintProposals(this: ISQLEditorDataPrivate, position, simple) {
         const executionContext = this.model.dataSource?.executionContext;
+
         if (!executionContext) {
+          return [];
+        }
+
+        const connectionKey = createConnectionParam(executionContext.projectId, executionContext.connectionId);
+
+        if (!this.connectionInfoResource.isConnected(connectionKey)) {
           return [];
         }
 
@@ -152,7 +175,7 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         this.hintsLimitIsMet = hints.length >= MAX_HINTS_LIMIT;
 
         return hints;
-      }, 300),
+      },
 
       async formatScript(): Promise<void> {
         if (this.isDisabled || this.isScriptEmpty || !this.model.dataSource?.executionContext) {
@@ -183,7 +206,7 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       async executeQuery(inNewTab = false): Promise<void> {
         const isQuery = this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
 
-        if (!isQuery || !this.isExecutionAllowed) {
+        if (!isQuery || !this.isExecutionAllowed()) {
           return;
         }
 
@@ -199,21 +222,8 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         }
       },
 
-      async showExecutionPlan(): Promise<void> {
-        const isQuery = this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
-
-        if (!isQuery || !this.isExecutionAllowed || !this.dialect?.supportsExplainExecutionPlan) {
-          return;
-        }
-
-        try {
-          const segment = await this.model.getResolvedSegment();
-          await this.executeQueryAction(segment, query => this.sqlExecutionPlanService.executeExecutionPlan(this.state, query.query));
-        } catch {}
-      },
-
       async executeScript(): Promise<void> {
-        if (!this.isExecutionAllowed || this.isDisabled || this.isScriptEmpty) {
+        if (!this.isExecutionAllowed() || this.isDisabled || this.isScriptEmpty) {
           return;
         }
 
@@ -241,10 +251,39 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         }
 
         this.onExecute.execute(true);
+
         try {
           this.executingScript = true;
+
           await this.model.getResolvedSegment();
-          const queries = this.model.parser.scripts;
+
+          const cursor = this.model.cursor;
+          const hasSelection = cursor.anchor !== cursor.head;
+
+          let queries = this.model.parser.scripts;
+
+          // Returns queries that are in range of [from, to]. If query is partially in range, it will be clamped to the range.
+          // Selection sele[ct 1; select 2;] will produce [ct 1, select 2] queries.
+          if (hasSelection) {
+            const from = Math.min(cursor.anchor, cursor.head);
+            const to = Math.max(cursor.anchor, cursor.head);
+            const rangeQueries = this.model.parser.getQueriesInRange(from, to);
+
+            queries = rangeQueries.map(script => {
+              const clampedBegin = Math.max(script.begin, from);
+              const clampedEnd = Math.min(script.end, to);
+
+              if (clampedBegin === script.begin && clampedEnd === script.end) {
+                return script;
+              }
+
+              return {
+                query: script.query.substring(clampedBegin - script.begin, clampedEnd - script.begin),
+                begin: clampedBegin,
+                end: clampedEnd,
+              };
+            });
+          }
 
           await this.sqlQueryService.executeQueries(
             this.state,
@@ -306,7 +345,6 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       getHintProposals: action.bound,
       formatScript: action.bound,
       executeQuery: action.bound,
-      showExecutionPlan: action.bound,
       executeScript: action.bound,
       isDisabled: computed,
       value: computed,
@@ -327,11 +365,12 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       sqlQueryService,
       sqlDialectInfoService,
       sqlEditorService,
-      sqlExecutionPlanService,
       sqlResultTabsService,
       notificationService,
       commonDialogService,
       sqlEditorSettingsService,
+      connectionInfoResource,
+      sqlEditorPermissionService,
     },
   );
 

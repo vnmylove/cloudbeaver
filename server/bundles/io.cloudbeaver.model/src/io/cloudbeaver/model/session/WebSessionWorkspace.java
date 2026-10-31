@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,17 @@
 package io.cloudbeaver.model.session;
 
 import io.cloudbeaver.WebSessionProjectImpl;
+import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPAdaptable;
 import org.jkiss.dbeaver.model.DBPImage;
 import org.jkiss.dbeaver.model.app.DBPPlatform;
 import org.jkiss.dbeaver.model.app.DBPProject;
 import org.jkiss.dbeaver.model.app.DBPWorkspace;
+import org.jkiss.dbeaver.model.fs.DBFFileSystemManager;
 import org.jkiss.dbeaver.model.impl.auth.SessionContextImpl;
 import org.jkiss.dbeaver.model.rm.RMUtils;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
@@ -38,11 +41,13 @@ import java.util.List;
  * Web workspace
  */
 public class WebSessionWorkspace implements DBPWorkspace {
+    private static final Log log = Log.getLog(WebSessionWorkspace.class);
 
     private final BaseWebSession session;
     private final SessionContextImpl workspaceAuthContext;
     private final List<WebSessionProjectImpl> accessibleProjects = new ArrayList<>();
     private WebSessionProjectImpl activeProject;
+    private DBFFileSystemManager fileSystemManager;
 
     public WebSessionWorkspace(BaseWebSession session) {
         this.session = session;
@@ -89,7 +94,9 @@ public class WebSessionWorkspace implements DBPWorkspace {
     @NotNull
     @Override
     public List<WebSessionProjectImpl> getProjects() {
-        return accessibleProjects;
+        synchronized (accessibleProjects) {
+            return new ArrayList<>(accessibleProjects);
+        }
     }
 
     @Nullable
@@ -101,23 +108,32 @@ public class WebSessionWorkspace implements DBPWorkspace {
     @Nullable
     @Override
     public WebSessionProjectImpl getProject(@NotNull String projectName) {
-        for (WebSessionProjectImpl project : accessibleProjects) {
-            if (project.getName().equals(projectName)) {
-                return project;
+        synchronized (accessibleProjects) {
+            for (WebSessionProjectImpl project : accessibleProjects) {
+                if (project.getName().equals(projectName)) {
+                    return project;
+                }
             }
         }
+        log.error("Project name '" + projectName + "' not found in session workspace");
         return null;
     }
 
     @Nullable
     @Override
-    public WebSessionProjectImpl getProjectById(@NotNull String projectId) {
-        for (WebSessionProjectImpl project : accessibleProjects) {
-            if (project.getId().equals(projectId)) {
-                return project;
+    public WebSessionProjectImpl getProjectById(@Nullable String projectId) {
+        if (projectId == null) {
+            return activeProject;
+        }
+        synchronized (accessibleProjects) {
+            for (WebSessionProjectImpl project : accessibleProjects) {
+                if (project.getId().equals(projectId)) {
+                    return project;
+                }
             }
         }
-        return activeProject;
+        log.error("Project ID '" + projectId + "' not found in session workspace");
+        return null;
     }
 
     @NotNull
@@ -158,36 +174,58 @@ public class WebSessionWorkspace implements DBPWorkspace {
         throw new DBException("Project renaming is not supported in web session workspace");
     }
 
-    public void setActiveProject(WebSessionProjectImpl activeProject) {
+    public void setActiveProject(@NotNull WebSessionProjectImpl activeProject) {
         this.activeProject = activeProject;
     }
 
-    void addProject(WebSessionProjectImpl project) {
-        accessibleProjects.add(project);
+    void addProject(@NotNull WebSessionProjectImpl project) {
+        synchronized (accessibleProjects) {
+            accessibleProjects.add(project);
+        }
     }
 
-    void removeProject(WebSessionProjectImpl project) {
-        accessibleProjects.remove(project);
+    void removeProject(@NotNull WebSessionProjectImpl project) {
+        synchronized (accessibleProjects) {
+            accessibleProjects.remove(project);
+        }
     }
 
     void clearProjects() {
-        if (!this.accessibleProjects.isEmpty()) {
-            for (WebSessionProjectImpl project : accessibleProjects) {
-                project.dispose();
+        synchronized (accessibleProjects) {
+            if (!this.accessibleProjects.isEmpty()) {
+                for (WebSessionProjectImpl project : accessibleProjects) {
+                    project.dispose();
+                }
+                this.activeProject = null;
+                this.accessibleProjects.clear();
             }
-            this.activeProject = null;
-            this.accessibleProjects.clear();
         }
     }
 
     @Override
     public boolean hasRealmPermission(@NotNull String permission) {
+        if (getWebSession() instanceof WebSession webSession) {
+            return webSession.getSessionPermissions().contains(permission);
+        }
         return false;
     }
 
     @Override
     public boolean supportsRealmFeature(@NotNull String feature) {
-        return false;
+        return ServletAppUtils.getServletApplication().getAppConfiguration().isFeatureEnabled(feature);
     }
 
+    @NotNull
+    @Override
+    public synchronized DBFFileSystemManager getFileSystemManager() {
+        if (fileSystemManager == null) {
+            synchronized (this) {
+                if (fileSystemManager == null) {
+                    fileSystemManager = new DBFFileSystemManager(session.getWorkspace());
+                }
+            }
+        }
+
+        return fileSystemManager;
+    }
 }

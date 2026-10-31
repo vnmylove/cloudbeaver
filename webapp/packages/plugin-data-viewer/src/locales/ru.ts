@@ -1,4 +1,6 @@
 export default [
+  ['data_viewer_presentations_label', 'Представления данных'],
+  ['data_viewer_panels_label', 'Панели данных'],
   ['plugin_data_viewer_data_viewer_settings_group', 'Редактор данных'],
   ['table_header_sql_expression', 'Введите SQL выражение чтобы отфильтровать результаты, например, column_name=10'],
   ['table_header_sql_expression_not_supported', 'Фильтрация данных недоступна'],
@@ -57,4 +59,5 @@ export default [
   ['settings_data_editor_fetch_default_description', 'Количество строк для выборки по умолчанию'],
   ['plugin_data_viewer_no_available_presentation', 'Нет доступных представлений'],
   ['plugin_data_viewer_result_set_save_success', 'Успешно сохранено'],
+  ['plugin_data_viewer_fetch_size', 'Размер выборки'],
 ];

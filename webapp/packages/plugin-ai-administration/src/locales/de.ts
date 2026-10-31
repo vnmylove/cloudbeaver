@@ -1,0 +1,23 @@
+export default [
+  ['ai_administration_tab_title', 'KI Einstellungen'],
+  ['ai_administration_tab_main', 'Allgemein'],
+  ['ai_administration_settings', 'KI Einstellungen'],
+  ['ai_administration_settings_save_success', 'KI-Einstellungen gespeichert'],
+  ['ai_administration_settings_save_fail', 'KI-Einstellungen konnten nicht gespeichert werden'],
+  ['ai_administration_settings_load_fail', 'KI-Einstellungen konnten nicht geladen werden'],
+  ['ai_administration_language_model_settings_save_fail', 'Einstellungen der KI-Engine konnten nicht gespeichert werden'],
+  ['plugin_ai_administration_rag_label', 'Nur relevante Objekte an die KI senden (Experimentell)'],
+  [
+    'plugin_ai_administration_rag_description',
+    'DBeaver analysiert Ihre Anfrage und sendet nur relevante Objekte an die KI, wodurch die Reaktionszeit und Genauigkeit verbessert und der Tokenverbrauch (RAG) reduziert wird. Derzeit nur bei Verwendung von PostgreSQL Cloudbeaver DB und OpenAI/Copilot-Engines unterstützt.',
+  ],
+  ['plugin_ai_administration_language_label', 'Sprache'],
+  ['plugin_ai_administration_language_description', 'Standardsprache für KI-Antworten'],
+  ['plugin_ai_administration_language_validation_error_title', 'Sprachvalidierungsfehler'],
+  ['plugin_ai_administration_language_validation_error', 'Die Sprache darf nur Buchstaben und Bindestriche enthalten'],
+  ['plugin_ai_administration_language_length_validation_error', 'Die Sprache darf nicht länger als 128 Zeichen sein'],
+  ['plugin_ai_administration_default_profile_label', 'Standardprofil'],
+  ['plugin_ai_administration_default_profile_description', 'Profil, das standardmäßig für KI-Funktionen verwendet wird'],
+  ['plugin_ai_administration_default_profile_no_profiles_title', 'No profiles available'],
+  ['plugin_ai_administration_default_profile_no_profiles_message', 'Erstellen Sie ein Profil, bevor Sie ein Standardprofil auswählen'],
+];

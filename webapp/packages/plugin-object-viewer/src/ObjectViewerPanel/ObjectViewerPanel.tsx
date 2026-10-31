@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2025 DBeaver Corp and others
+ * Copyright (C) 2020-2026 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,11 +9,11 @@ import { useEffect } from 'react';
 import { runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 
-import { getComputed, s, SContext, type StyleRegistry, TextPlaceholder, useResource, useS, useTranslate } from '@cloudbeaver/core-blocks';
+import { getComputed, SContext, type StyleRegistry, TextPlaceholder, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { ConnectionInfoResource } from '@cloudbeaver/core-connections';
 import { useService } from '@cloudbeaver/core-di';
 import { NavNodeInfoResource } from '@cloudbeaver/core-navigation-tree';
-import { TabPanel, TabsBox, TabStyles, useTabLocalState } from '@cloudbeaver/core-ui';
+import { TabList, TabPanel, TabsState, TabStyles, useTabLocalState } from '@cloudbeaver/core-ui';
 import { MetadataMap } from '@cloudbeaver/core-utils';
 import { ConnectionShieldLazy } from '@cloudbeaver/plugin-connections';
 import type { TabHandlerPanelComponent } from '@cloudbeaver/plugin-navigation-tabs';
@@ -22,7 +22,6 @@ import type { IObjectViewerTabState } from '../IObjectViewerTabState.js';
 import { DBObjectPagePanel } from '../ObjectPage/DBObjectPagePanel.js';
 import { DBObjectPageService } from '../ObjectPage/DBObjectPageService.js';
 import { DBObjectPageTab } from '../ObjectPage/DBObjectPageTab.js';
-import styles from './shared/ObjectViewerPanel.module.css';
 import ObjectViewerPanelTab from './shared/ObjectViewerPanelTab.module.css';
 
 const tabsRegistry: StyleRegistry = [
@@ -37,10 +36,9 @@ const tabsRegistry: StyleRegistry = [
 
 export const ObjectViewerPanel: TabHandlerPanelComponent<IObjectViewerTabState> = observer(function ObjectViewerPanel({ tab }) {
   const translate = useTranslate();
-  const dbObjectPagesService = useService(DBObjectPageService);
+  const dbObjectPageService = useService(DBObjectPageService);
   const navNodeInfoResource = useService(NavNodeInfoResource);
   const innerTabState = useTabLocalState(() => new MetadataMap<string, any>());
-  const style = useS(styles);
 
   const objectId = tab.handlerState.objectId;
   const connectionKey = tab.handlerState.connectionKey || null;
@@ -60,7 +58,7 @@ export const ObjectViewerPanel: TabHandlerPanelComponent<IObjectViewerTabState> 
     });
   }, [node.tryGetData, tab.handlerState]);
 
-  const pages = dbObjectPagesService.orderedPages;
+  const pages = dbObjectPageService.orderedPages;
 
   if (tab.handlerState.error) {
     return <TextPlaceholder>{translate('plugin_object_viewer_error')}</TextPlaceholder>;
@@ -69,24 +67,22 @@ export const ObjectViewerPanel: TabHandlerPanelComponent<IObjectViewerTabState> 
   return (
     <ConnectionShieldLazy connectionKey={connectionKey}>
       {node.tryGetData ? (
-        <TabsBox
-          currentTabId={tab.handlerState.pageId}
-          tabsClassName={s(style, { tabs: true })}
-          tabs={
-            <SContext registry={tabsRegistry}>
-              {pages.map(page => (
-                <DBObjectPageTab key={page.key} tab={tab} page={page} onSelect={dbObjectPagesService.selectPage} />
-              ))}
-            </SContext>
-          }
-          localState={innerTabState}
-        >
-          {pages.map(page => (
-            <TabPanel key={page.key} tabId={page.key} lazy>
-              <DBObjectPagePanel tab={tab} page={page} />
-            </TabPanel>
-          ))}
-        </TabsBox>
+        <TabsState currentTabId={tab.handlerState.pageId} localState={innerTabState}>
+          <div className="tw:outline-none! tw:flex-1 tw:flex tw:flex-col tw:max-w-full">
+            <TabList className="theme-background-background theme-text-text-primary-on-light">
+              <SContext registry={tabsRegistry}>
+                {pages.map(page => (
+                  <DBObjectPageTab key={page.key} tab={tab} page={page} onSelect={dbObjectPageService.selectPage} />
+                ))}
+              </SContext>
+            </TabList>
+            {pages.map(page => (
+              <TabPanel key={page.key} className="tw:flex-1 tw:flex tw:overflow-hidden tw:relative" tabId={page.key} lazy>
+                <DBObjectPagePanel tab={tab} page={page} />
+              </TabPanel>
+            ))}
+          </div>
+        </TabsState>
       ) : (
         <TextPlaceholder>{translate('plugin_object_viewer_table_no_items')}</TextPlaceholder>
       )}
